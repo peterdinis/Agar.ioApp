@@ -137,7 +137,7 @@ export class GameServer {
 
   private findBestTarget(bot: Player): { x: number; y: number; priority: number } | null {
     let bestTarget: { x: number; y: number; priority: number } | null = null;
-    let currentPriority = 0; // Začneme s prioritou 0
+    let currentPriority = 0;
 
     // Hľadaj menších hráčov (najvyššia priorita pre hunter botov)
     for (const [otherId, player] of this.players) {
@@ -161,7 +161,7 @@ export class GameServer {
 
       if (priority > currentPriority && priority > 30) {
         bestTarget = { x: player.x, y: player.y, priority };
-        currentPriority = priority; // Aktualizuj currentPriority
+        currentPriority = priority;
       }
     }
 
@@ -423,7 +423,8 @@ export class GameServer {
         })),
       };
 
-      this.io.volatile.emit('update', gameState);
+      // ZMENENÉ: z 'update' na 'gameUpdate'
+      this.io.volatile.emit('gameUpdate', gameState);
 
       const processingTime = Date.now() - currentTime;
       const waitTime = Math.max(0, targetFrameTime - processingTime);

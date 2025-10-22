@@ -20,16 +20,29 @@ function gameApp() {
     finalMass: 0,
     finalPosition: 0,
     eatenBy: '',
+    lastServerUpdate: 0,
+    frameCount: 0,
+    lastMoveSend: 0,
 
     init() {
-      this.socket = io({
-        transports: ['websocket'],
-        upgrade: false,
-      });
-      this.setupSocketListeners();
+      // Vytvor nové socket spojenie len ak ešte neexistuje
+      if (!this.socket || !this.socket.connected) {
+        this.socket = io({
+          transports: ['websocket'],
+          upgrade: false,
+        });
+        this.setupSocketListeners();
+      }
     },
 
     setupSocketListeners() {
+      if (!this.socket) return;
+      
+      // Odstráň staré listenery pred pridáním nových
+      this.socket.off('init');
+      this.socket.off('gameUpdate');
+      this.socket.off('playerDeath');
+
       this.socket.on('init', (data) => {
         this.currentPlayer = data.player;
         this.worldWidth = data.worldWidth;
@@ -38,9 +51,10 @@ function gameApp() {
         this.startGameLoop();
       });
 
-      this.socket.on('update', (gameState) => {
-        if (this.gameOver) return;
+      this.socket.on('gameUpdate', (gameState) => {
+        if (this.gameOver || !this.gameStarted) return;
 
+        this.lastServerUpdate = Date.now();
         this.players = gameState.players;
         this.food = gameState.food;
         this.playerCount = this.players.length;
@@ -49,16 +63,11 @@ function gameApp() {
         if (current) {
           this.currentPlayer = current;
         } else {
-          // Player was eaten
           this.handlePlayerDeath();
         }
 
         this.updateLeaderboard();
         this.updateInterpolation();
-      });
-
-      this.socket.on('eaten', (data) => {
-        this.handlePlayerDeath(data);
       });
 
       this.socket.on('playerDeath', (data) => {
@@ -94,22 +103,45 @@ function gameApp() {
     },
 
     updateInterpolation() {
+      const now = Date.now();
       this.players.forEach(p => {
         if (!this.interpolatedPlayers.has(p.id)) {
-          this.interpolatedPlayers.set(p.id, { x: p.x, y: p.y, radius: p.radius });
+          this.interpolatedPlayers.set(p.id, { 
+            x: p.x, 
+            y: p.y, 
+            radius: p.radius,
+            lastUpdate: now 
+          });
+        } else {
+          const interp = this.interpolatedPlayers.get(p.id);
+          interp.lastUpdate = now;
         }
       });
+
+      // Cleanup starých interpolácií
+      for (const [id, interp] of this.interpolatedPlayers) {
+        if (now - interp.lastUpdate > 5000) {
+          this.interpolatedPlayers.delete(id);
+        }
+      }
     },
 
     startGame() {
       if (!this.playerName.trim()) {
         this.playerName = 'Anonymous';
       }
+      
+      // Uisti sa, že socket je pripojený
+      if (!this.socket || !this.socket.connected) {
+        this.init();
+      }
+      
       this.gameStarted = true;
       this.gameOver = false;
       this.finalMass = 0;
       this.finalPosition = 0;
       this.eatenBy = '';
+      this.interpolatedPlayers.clear();
       this.socket.emit('join', this.playerName);
     },
 
@@ -119,35 +151,60 @@ function gameApp() {
     },
 
     backToMenu() {
-      this.gameOver = false;
+      console.log('Returning to main menu...');
+      
+      // Reset všetkých stavových premenných
       this.gameStarted = false;
+      this.gameOver = false;
       this.currentPlayer = null;
       this.players = [];
       this.food = [];
+      this.playerCount = 0;
+      this.leaderboard = [];
       this.interpolatedPlayers.clear();
+      this.finalMass = 0;
+      this.finalPosition = 0;
+      this.eatenBy = '';
       
-      if (this.canvas) {
-        const ctx = this.canvas.getContext('2d');
-        ctx.fillStyle = '#222';
-        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+      // NEODPOJOVAŤ SOCKET - len resetovať stav
+      // Socket ostáva pripojený pre budúce hry
+      
+      // Vyčistiť canvas
+      if (this.canvas && this.ctx) {
+        this.ctx.fillStyle = '#222';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
       }
+      
+      console.log('Successfully returned to main menu');
     },
 
-    // ... (zvyšok funkcií zostáva rovnaký: initCanvas, resizeCanvas, startGameLoop, update, render, drawGrid, drawFood, drawPlayers, updateLeaderboard)
     initCanvas() {
       this.canvas = document.getElementById('gameCanvas');
+      if (!this.canvas) return;
+      
       this.ctx = this.canvas.getContext('2d');
       this.resizeCanvas();
 
       window.addEventListener('resize', () => this.resizeCanvas());
+      
       this.canvas.addEventListener('mousemove', (e) => {
         const rect = this.canvas.getBoundingClientRect();
         this.mouse.x = e.clientX - rect.left;
         this.mouse.y = e.clientY - rect.top;
       });
+
+      // Touch support for mobile
+      this.canvas.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        const rect = this.canvas.getBoundingClientRect();
+        const touch = e.touches[0];
+        this.mouse.x = touch.clientX - rect.left;
+        this.mouse.y = touch.clientY - rect.top;
+      }, { passive: false });
     },
 
     resizeCanvas() {
+      if (!this.canvas) return;
       this.canvas.width = window.innerWidth;
       this.canvas.height = window.innerHeight;
     },
@@ -157,58 +214,75 @@ function gameApp() {
         if (!this.lastRender) this.lastRender = timestamp;
         const delta = timestamp - this.lastRender;
         
-        this.update(delta);
-        this.render();
+        this.frameCount++;
         
-        this.lastRender = timestamp;
+        // Render len na 30 FPS pre lepšiu výkonnosť
+        if (delta >= 33) {
+          this.update(delta);
+          this.render();
+          this.lastRender = timestamp;
+        }
+        
         requestAnimationFrame(loop);
       };
       requestAnimationFrame(loop);
     },
 
     update(delta) {
-      if (!this.currentPlayer || this.gameOver) return;
+      if (!this.currentPlayer || this.gameOver || !this.gameStarted) return;
 
       const targetX = this.camera.x + this.mouse.x;
       const targetY = this.camera.y + this.mouse.y;
 
-      this.socket.emit('move', { x: targetX, y: targetY });
+      // Optimalizácia: posielaj pohyb len každých 100ms
+      const now = Date.now();
+      if (now - this.lastMoveSend > 100) {
+        this.socket.emit('move', { x: targetX, y: targetY });
+        this.lastMoveSend = now;
+      }
 
-      const lerpFactor = 0.1;
+      // Spomalená interpolácia kamery
+      const lerpFactor = 0.08;
       const targetCameraX = this.currentPlayer.x - this.canvas.width / 2;
       const targetCameraY = this.currentPlayer.y - this.canvas.height / 2;
       
       this.camera.x += (targetCameraX - this.camera.x) * lerpFactor;
       this.camera.y += (targetCameraY - this.camera.y) * lerpFactor;
 
+      // Plynulá interpolácia pozícií hráčov
       this.players.forEach(p => {
         const interp = this.interpolatedPlayers.get(p.id);
         if (interp) {
-          interp.x += (p.x - interp.x) * 0.3;
-          interp.y += (p.y - interp.y) * 0.3;
-          interp.radius += (p.radius - interp.radius) * 0.2;
+          const interpFactor = 0.2;
+          interp.x += (p.x - interp.x) * interpFactor;
+          interp.y += (p.y - interp.y) * interpFactor;
+          interp.radius += (p.radius - interp.radius) * interpFactor;
         }
       });
     },
 
     render() {
       if (!this.ctx) return;
-
+      
+      // Jednoduché pozadie
       this.ctx.fillStyle = '#222';
       this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-      if (!this.currentPlayer || this.gameOver) return;
+      if (!this.currentPlayer || this.gameOver || !this.gameStarted) return;
 
       this.ctx.save();
       this.ctx.translate(-this.camera.x, -this.camera.y);
 
-      this.drawGrid();
+      // Kresli mriežku len každý druhý frame
+      if (this.frameCount % 2 === 0) {
+        this.drawGrid();
+      }
       
       const viewBounds = {
-        left: this.camera.x - 100,
-        right: this.camera.x + this.canvas.width + 100,
-        top: this.camera.y - 100,
-        bottom: this.camera.y + this.canvas.height + 100,
+        left: this.camera.x - 200,
+        right: this.camera.x + this.canvas.width + 200,
+        top: this.camera.y - 200,
+        bottom: this.camera.y + this.canvas.height + 200,
       };
 
       this.drawFood(viewBounds);
@@ -242,28 +316,28 @@ function gameApp() {
     },
 
     drawFood(bounds) {
-      this.food.forEach(f => {
+      for (const f of this.food) {
         if (f.x < bounds.left || f.x > bounds.right || 
-            f.y < bounds.top || f.y > bounds.bottom) return;
+            f.y < bounds.top || f.y > bounds.bottom) continue;
 
         this.ctx.fillStyle = f.color;
         this.ctx.beginPath();
         this.ctx.arc(f.x, f.y, f.radius, 0, Math.PI * 2);
         this.ctx.fill();
-      });
+      }
     },
 
     drawPlayers(bounds) {
       const sortedPlayers = [...this.players].sort((a, b) => a.radius - b.radius);
 
-      sortedPlayers.forEach(p => {
+      for (const p of sortedPlayers) {
         const interp = this.interpolatedPlayers.get(p.id);
         const x = interp ? interp.x : p.x;
         const y = interp ? interp.y : p.y;
         const radius = interp ? interp.radius : p.radius;
 
         if (x - radius > bounds.right || x + radius < bounds.left ||
-            y - radius > bounds.bottom || y + radius < bounds.top) return;
+            y - radius > bounds.bottom || y + radius < bounds.top) continue;
 
         this.ctx.fillStyle = p.color;
         this.ctx.beginPath();
@@ -280,22 +354,25 @@ function gameApp() {
           this.ctx.stroke();
         }
 
-        this.ctx.fillStyle = '#fff';
-        this.ctx.strokeStyle = '#000';
-        this.ctx.lineWidth = 3;
-        const fontSize = Math.max(14, radius / 2.5);
-        this.ctx.font = `bold ${fontSize}px Arial`;
-        this.ctx.textAlign = 'center';
-        this.ctx.textBaseline = 'middle';
-        this.ctx.strokeText(p.name, x, y);
-        this.ctx.fillText(p.name, x, y);
+        if (radius > 15) {
+          this.ctx.fillStyle = '#fff';
+          this.ctx.strokeStyle = '#000';
+          this.ctx.lineWidth = 3;
+          const fontSize = Math.max(12, radius / 3);
+          this.ctx.font = `bold ${fontSize}px Arial`;
+          this.ctx.textAlign = 'center';
+          this.ctx.textBaseline = 'middle';
+          
+          this.ctx.strokeText(p.name, x, y);
+          this.ctx.fillText(p.name, x, y);
 
-        if (p.isBot) {
-          this.ctx.font = `${fontSize * 0.6}px Arial`;
-          this.ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-          this.ctx.fillText('BOT', x, y + fontSize + 5);
+          if (p.isBot) {
+            this.ctx.font = `${fontSize * 0.6}px Arial`;
+            this.ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+            this.ctx.fillText('BOT', x, y + fontSize + 5);
+          }
         }
-      });
+      }
     },
 
     updateLeaderboard() {

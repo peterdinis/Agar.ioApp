@@ -276,3 +276,27 @@ input.form-control:focus {
     width: 100%;
   }
 }
+
+.game-over-actions .btn {
+  min-width: 160px;
+  margin: 0 10px;
+  transition: all 0.3s ease;
+}
+
+.game-over-actions .btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+/* Responsive pre mobile */
+@media (max-width: 576px) {
+  .game-over-actions {
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  .game-over-actions .btn {
+    width: 100%;
+    margin: 5px 0;
+  }
+}
