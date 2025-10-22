@@ -11,6 +11,9 @@ interface Player {
   isBot: boolean;
   targetX?: number;
   targetY?: number;
+  lastTargetChange?: number;
+  behavior: 'hunter' | 'prey' | 'neutral';
+  aggression: number;
 }
 
 interface Food {
@@ -68,6 +71,7 @@ export class GameServer {
   private spawnBots(): void {
     for (let i = 0; i < this.BOT_COUNT; i++) {
       const botId = `bot_${i}_${Date.now()}`;
+      const aggression = Math.random();
       const bot: Player = {
         id: botId,
         x: Math.random() * this.WORLD_WIDTH,
@@ -79,97 +83,158 @@ export class GameServer {
         isBot: true,
         targetX: Math.random() * this.WORLD_WIDTH,
         targetY: Math.random() * this.WORLD_HEIGHT,
+        lastTargetChange: Date.now(),
+        behavior: aggression > 0.7 ? 'hunter' : aggression > 0.3 ? 'neutral' : 'prey',
+        aggression: aggression,
       };
       this.players.set(botId, bot);
     }
   }
 
   private updateBots(deltaTime: number): void {
+    const currentTime = Date.now();
+    
     for (const [id, bot] of this.players) {
       if (!bot.isBot) continue;
 
-      // Nájdi najbližšie jedlo alebo menšieho hráča
-      let nearestTarget = this.findNearestTarget(bot);
+      // Zmena správania podľa veľkosti
+      this.updateBotBehavior(bot);
 
-      if (nearestTarget) {
-        bot.targetX = nearestTarget.x;
-        bot.targetY = nearestTarget.y;
+      // Nájdi cieľ
+      let target = this.findBestTarget(bot);
+      
+      if (target) {
+        bot.targetX = target.x;
+        bot.targetY = target.y;
       } else if (
         !bot.targetX || 
         !bot.targetY || 
-        Math.random() < 0.01 ||
-        Math.abs(bot.x - bot.targetX) < 50 && Math.abs(bot.y - bot.targetY) < 50
+        currentTime - (bot.lastTargetChange || 0) > 3000 ||
+        this.distance(bot.x, bot.y, bot.targetX!, bot.targetY!) < 50
       ) {
-        // Náhodný cieľ
+        // Náhodný cieľ ak žiadny dobrý cieľ neexistuje
         bot.targetX = Math.random() * this.WORLD_WIDTH;
         bot.targetY = Math.random() * this.WORLD_HEIGHT;
+        bot.lastTargetChange = currentTime;
       }
 
       // Pohyb k cieľu
-      const dx = bot.targetX - bot.x;
-      const dy = bot.targetY - bot.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
-
-      if (distance > 10) {
-        const speed = Math.max(3, 12 - bot.mass / 40) * (deltaTime / 16.67);
-        const moveX = (dx / distance) * speed;
-        const moveY = (dy / distance) * speed;
-
-        bot.x += moveX;
-        bot.y += moveY;
-
-        // Границe sveta
-        bot.x = Math.max(bot.radius, Math.min(this.WORLD_WIDTH - bot.radius, bot.x));
-        bot.y = Math.max(bot.radius, Math.min(this.WORLD_HEIGHT - bot.radius, bot.y));
-      }
+      this.moveBotTowardsTarget(bot, deltaTime);
 
       // Útek pred väčšími hráčmi
-      for (const [otherId, otherPlayer] of this.players) {
-        if (otherId === id) continue;
-        if (otherPlayer.mass > bot.mass * 1.2) {
-          const distX = bot.x - otherPlayer.x;
-          const distY = bot.y - otherPlayer.y;
-          const dist = Math.sqrt(distX * distX + distY * distY);
+      this.avoidBiggerPlayers(bot);
+    }
+  }
+
+  private updateBotBehavior(bot: Player): void {
+    if (bot.mass > 100) {
+      bot.behavior = 'hunter';
+      bot.aggression = Math.min(1, bot.aggression + 0.1);
+    } else if (bot.mass < 30) {
+      bot.behavior = 'prey';
+    }
+  }
+
+  private findBestTarget(bot: Player): { x: number; y: number; priority: number } | null {
+    let bestTarget: { x: number; y: number; priority: number } | null = null;
+    let currentPriority = bestTarget!.priority || 0;
+
+    // Hľadaj menších hráčov (najvyššia priorita pre hunter botov)
+    for (const [otherId, player] of this.players) {
+      if (otherId === bot.id) continue;
+      
+      const dist = this.distance(bot.x, bot.y, player.x, player.y);
+      const massRatio = player.mass / bot.mass;
+
+      let priority = 0;
+      
+      if (massRatio < 0.8 && dist < 600) {
+        // Menší hráč - veľká priorita
+        priority = 100 - (dist / 10) + (0.8 - massRatio) * 50;
+        
+        if (bot.behavior === 'hunter') priority += 50;
+        if (player.isBot) priority -= 20; // Menej agresívne k botom
+      } else if (massRatio > 1.2 && dist < 400) {
+        // Väčší hráč - nízka priorita (útek)
+        priority = 10;
+      }
+
+      if (priority > currentPriority && priority > 30) {
+        bestTarget = { x: player.x, y: player.y, priority };
+      }
+    }
+
+    // Hľadaj jedlo (stredná priorita)
+    if (!bestTarget || bestTarget.priority < 80) {
+      for (const [_, food] of this.food) {
+        const dist = this.distance(bot.x, bot.y, food.x, food.y);
+        
+        if (dist < 400) {
+          const priority = 70 - (dist / 10) + (food.radius / 2);
           
-          if (dist < 200) {
-            bot.targetX = bot.x + (distX / dist) * 300;
-            bot.targetY = bot.y + (distY / dist) * 300;
-            break;
+          if (priority > currentPriority) {
+            bestTarget = { x: food.x, y: food.y, priority };
+            currentPriority = priority;
           }
+        }
+      }
+    }
+
+    return bestTarget;
+  }
+
+  private moveBotTowardsTarget(bot: Player, deltaTime: number): void {
+    if (!bot.targetX || !bot.targetY) return;
+
+    const dx = bot.targetX - bot.x;
+    const dy = bot.targetY - bot.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    if (distance > 10) {
+      // Rýchlosť závisí od veľkosti a správania
+      let baseSpeed = Math.max(2, 10 - bot.mass / 40);
+      if (bot.behavior === 'hunter') baseSpeed *= 1.2;
+      if (bot.behavior === 'prey') baseSpeed *= 0.9;
+
+      const speed = baseSpeed * (deltaTime / 16.67);
+      const moveX = (dx / distance) * speed;
+      const moveY = (dy / distance) * speed;
+
+      bot.x += moveX;
+      bot.y += moveY;
+
+      // Hranice sveta
+      bot.x = Math.max(bot.radius, Math.min(this.WORLD_WIDTH - bot.radius, bot.x));
+      bot.y = Math.max(bot.radius, Math.min(this.WORLD_HEIGHT - bot.radius, bot.y));
+    }
+  }
+
+  private avoidBiggerPlayers(bot: Player): void {
+    for (const [otherId, player] of this.players) {
+      if (otherId === bot.id) continue;
+      
+      if (player.mass > bot.mass * 1.15) {
+        const distX = bot.x - player.x;
+        const distY = bot.y - player.y;
+        const dist = Math.sqrt(distX * distX + distY * distY);
+        
+        // Útek ak je nebezpečenstvo blízko
+        if (dist < 300) {
+          const escapeDistance = 400;
+          const escapeX = bot.x + (distX / dist) * escapeDistance;
+          const escapeY = bot.y + (distY / dist) * escapeDistance;
+          
+          bot.targetX = Math.max(bot.radius, Math.min(this.WORLD_WIDTH - bot.radius, escapeX));
+          bot.targetY = Math.max(bot.radius, Math.min(this.WORLD_HEIGHT - bot.radius, escapeY));
+          bot.lastTargetChange = Date.now();
+          break;
         }
       }
     }
   }
 
-  private findNearestTarget(bot: Player): { x: number; y: number } | null {
-    let nearest: { x: number; y: number; distance: number } | null = null;
-
-    // Hľadaj jedlo
-    for (const [_, food] of this.food) {
-      const dx = food.x - bot.x;
-      const dy = food.y - bot.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
-
-      if (distance < 300 && (!nearest || distance < nearest.distance)) {
-        nearest = { x: food.x, y: food.y, distance };
-      }
-    }
-
-    // Hľadaj menších hráčov
-    for (const [otherId, player] of this.players) {
-      if (otherId === bot.id) continue;
-      if (player.mass < bot.mass * 0.8) {
-        const dx = player.x - bot.x;
-        const dy = player.y - bot.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-
-        if (distance < 400 && (!nearest || distance < nearest.distance)) {
-          nearest = { x: player.x, y: player.y, distance };
-        }
-      }
-    }
-
-    return nearest;
+  private distance(x1: number, y1: number, x2: number, y2: number): number {
+    return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
   }
 
   private getRandomColor(): string {
@@ -200,6 +265,8 @@ export class GameServer {
           color: this.getRandomColor(),
           name: name || 'Anonymous',
           isBot: false,
+          behavior: 'neutral',
+          aggression: 0.5,
         };
         this.players.set(socket.id, player);
 
@@ -242,55 +309,84 @@ export class GameServer {
   }
 
   private checkCollisions(): void {
-  // Player-food collisions
-  for (const [playerId, player] of this.players) {
-    for (const [foodId, foodItem] of this.food) {
-      const dx = player.x - foodItem.x;
-      const dy = player.y - foodItem.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
+    // Skontroluj všetky kolízie medzi hráčmi
+    const playersArray = Array.from(this.players.entries());
+    
+    for (let i = 0; i < playersArray.length; i++) {
+      const [playerId, player] = playersArray[i];
+      
+      // Player-food kolízie
+      for (const [foodId, foodItem] of this.food) {
+        const dx = player.x - foodItem.x;
+        const dy = player.y - foodItem.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
 
-      if (distance < player.radius) {
-        this.food.delete(foodId);
-        player.mass += foodItem.radius * 0.5;
-        player.radius = this.massToRadius(player.mass);
-        this.spawnFood();
-      }
-    }
-
-    // Player-player collisions
-    for (const [otherPlayerId, otherPlayer] of this.players) {
-      if (playerId === otherPlayerId) continue;
-
-      const dx = player.x - otherPlayer.x;
-      const dy = player.y - otherPlayer.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
-      const radiusDiff = Math.abs(player.radius - otherPlayer.radius);
-
-      if (distance < radiusDiff * 0.7) {
-        if (player.mass > otherPlayer.mass * 1.15) {
-          // Player eats other player
-          player.mass += otherPlayer.mass * 0.8;
+        if (distance < player.radius) {
+          this.food.delete(foodId);
+          player.mass += foodItem.radius * 0.5;
           player.radius = this.massToRadius(player.mass);
-          
-          // Notify about death
-          if (!otherPlayer.isBot) {
-            this.io.to(otherPlayerId).emit('playerDeath', {
-              playerId: otherPlayerId,
-              eatenBy: player.name,
-              finalMass: otherPlayer.mass
-            });
-          }
+          this.spawnFood();
+        }
+      }
 
-          // Respawn
-          otherPlayer.x = Math.random() * this.WORLD_WIDTH;
-          otherPlayer.y = Math.random() * this.WORLD_HEIGHT;
-          otherPlayer.mass = this.BASE_RADIUS;
-          otherPlayer.radius = this.BASE_RADIUS;
+      // Player-player kolízie
+      for (let j = i + 1; j < playersArray.length; j++) {
+        const [otherPlayerId, otherPlayer] = playersArray[j];
+        
+        const dx = player.x - otherPlayer.x;
+        const dy = player.y - otherPlayer.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        // Kolízia nastane ak je vzdialenosť menšia ako súčet polomerov
+        if (distance < player.radius + otherPlayer.radius) {
+          // Zisti kto koho môže zjesť
+          const canPlayerEatOther = player.mass > otherPlayer.mass * 1.15;
+          const canOtherEatPlayer = otherPlayer.mass > player.mass * 1.15;
+
+          if (canPlayerEatOther) {
+            // Hráč zje druhého
+            player.mass += otherPlayer.mass * 0.8;
+            player.radius = this.massToRadius(player.mass);
+            
+            // Notify about death
+            if (!otherPlayer.isBot) {
+              this.io.to(otherPlayerId).emit('playerDeath', {
+                playerId: otherPlayerId,
+                eatenBy: player.name,
+                finalMass: otherPlayer.mass
+              });
+            }
+
+            // Respawn
+            otherPlayer.x = Math.random() * this.WORLD_WIDTH;
+            otherPlayer.y = Math.random() * this.WORLD_HEIGHT;
+            otherPlayer.mass = this.BASE_RADIUS;
+            otherPlayer.radius = this.BASE_RADIUS;
+
+          } else if (canOtherEatPlayer) {
+            // Druhý hráč zje tohto
+            otherPlayer.mass += player.mass * 0.8;
+            otherPlayer.radius = this.massToRadius(otherPlayer.mass);
+            
+            // Notify about death
+            if (!player.isBot) {
+              this.io.to(playerId).emit('playerDeath', {
+                playerId: playerId,
+                eatenBy: otherPlayer.name,
+                finalMass: player.mass
+              });
+            }
+
+            // Respawn
+            player.x = Math.random() * this.WORLD_WIDTH;
+            player.y = Math.random() * this.WORLD_HEIGHT;
+            player.mass = this.BASE_RADIUS;
+            player.radius = this.BASE_RADIUS;
+          }
         }
       }
     }
   }
-}
 
   private startGameLoop(): void {
     const targetFPS = 60;
