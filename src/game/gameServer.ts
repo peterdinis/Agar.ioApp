@@ -137,7 +137,7 @@ export class GameServer {
 
   private findBestTarget(bot: Player): { x: number; y: number; priority: number } | null {
     let bestTarget: { x: number; y: number; priority: number } | null = null;
-    let currentPriority = bestTarget!.priority || 0;
+    let currentPriority = 0; // Začneme s prioritou 0
 
     // Hľadaj menších hráčov (najvyššia priorita pre hunter botov)
     for (const [otherId, player] of this.players) {
@@ -161,11 +161,12 @@ export class GameServer {
 
       if (priority > currentPriority && priority > 30) {
         bestTarget = { x: player.x, y: player.y, priority };
+        currentPriority = priority; // Aktualizuj currentPriority
       }
     }
 
     // Hľadaj jedlo (stredná priorita)
-    if (!bestTarget || bestTarget.priority < 80) {
+    if (!bestTarget || currentPriority < 80) {
       for (const [_, food] of this.food) {
         const dist = this.distance(bot.x, bot.y, food.x, food.y);
         
