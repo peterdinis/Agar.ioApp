@@ -70,7 +70,7 @@ export class GameServer {
 
   private spawnBots(): void {
     for (let i = 0; i < this.BOT_COUNT; i++) {
-      const botId = `bot_${i}_${Date.now()}`;
+      const botId = `bot_${i}`;
       const aggression = Math.random();
       const bot: Player = {
         id: botId,
@@ -192,10 +192,12 @@ export class GameServer {
     const distance = Math.sqrt(dx * dx + dy * dy);
 
     if (distance > 10) {
-      // Rýchlosť závisí od veľkosti a správania
-      let baseSpeed = Math.max(2, 10 - bot.mass / 40);
-      if (bot.behavior === 'hunter') baseSpeed *= 1.2;
-      if (bot.behavior === 'prey') baseSpeed *= 0.9;
+      // ROVNAKÁ RÝCHLOSŤ AKO HRÁČ
+      let baseSpeed = Math.max(3, 12 - bot.mass / 40);
+      
+      // Odstránené bonusy za správanie - všetci majú rovnakú rýchlosť
+      // if (bot.behavior === 'hunter') baseSpeed *= 1.2;
+      // if (bot.behavior === 'prey') baseSpeed *= 0.9;
 
       const speed = baseSpeed * (deltaTime / 16.67);
       const moveX = (dx / distance) * speed;
@@ -257,6 +259,11 @@ export class GameServer {
       console.log(`Player connected: ${socket.id}`);
 
       socket.on('join', (name: string) => {
+        // Odstrániť existujúceho hráča ak sa znova pripojí
+        if (this.players.has(socket.id)) {
+          this.players.delete(socket.id);
+        }
+
         const player: Player = {
           id: socket.id,
           x: Math.random() * this.WORLD_WIDTH,
@@ -289,6 +296,7 @@ export class GameServer {
         const distance = Math.sqrt(dx * dx + dy * dy);
 
         if (distance > 0) {
+          // ROVNAKÁ RÝCHLOSŤ AKO BOTI
           const speed = Math.max(3, 12 - player.mass / 40);
           const moveDistance = Math.min(speed, distance);
           player.x += (dx / distance) * moveDistance;
@@ -423,7 +431,6 @@ export class GameServer {
         })),
       };
 
-      // ZMENENÉ: z 'update' na 'gameUpdate'
       this.io.volatile.emit('gameUpdate', gameState);
 
       const processingTime = Date.now() - currentTime;

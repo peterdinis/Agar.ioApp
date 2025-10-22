@@ -23,30 +23,23 @@ function gameApp() {
     lastServerUpdate: 0,
     frameCount: 0,
     lastMoveSend: 0,
+    playerInitialized: false, // Nová premenná na sledovanie inicializácie
 
     init() {
-      // Vytvor nové socket spojenie len ak ešte neexistuje
-      if (!this.socket || !this.socket.connected) {
-        this.socket = io({
-          transports: ['websocket'],
-          upgrade: false,
-        });
-        this.setupSocketListeners();
-      }
+      this.socket = io({
+        transports: ['websocket'],
+        upgrade: false,
+      });
+      this.setupSocketListeners();
     },
 
     setupSocketListeners() {
-      if (!this.socket) return;
-      
-      // Odstráň staré listenery pred pridáním nových
-      this.socket.off('init');
-      this.socket.off('gameUpdate');
-      this.socket.off('playerDeath');
-
       this.socket.on('init', (data) => {
+        console.log('Game initialized', data.player);
         this.currentPlayer = data.player;
         this.worldWidth = data.worldWidth;
         this.worldHeight = data.worldHeight;
+        this.playerInitialized = true; // Hráč je inicializovaný
         this.initCanvas();
         this.startGameLoop();
       });
@@ -59,11 +52,13 @@ function gameApp() {
         this.food = gameState.food;
         this.playerCount = this.players.length;
 
-        const current = this.players.find(p => p.id === this.currentPlayer?.id);
-        if (current) {
-          this.currentPlayer = current;
-        } else {
-          this.handlePlayerDeath();
+        // DÔLEŽITÉ: Hľadať hráča len ak je inicializovaný
+        if (this.playerInitialized && this.currentPlayer) {
+          const current = this.players.find(p => p.id === this.currentPlayer.id);
+          if (current) {
+            this.currentPlayer = current;
+          }
+          // Ak hráč nie je v zozname, NEspúšťať game-over
         }
 
         this.updateLeaderboard();
@@ -71,15 +66,25 @@ function gameApp() {
       });
 
       this.socket.on('playerDeath', (data) => {
+        console.log('Player death received', data);
         if (data.playerId === this.currentPlayer?.id) {
           this.handlePlayerDeath(data);
         }
+      });
+
+      this.socket.on('connect', () => {
+        console.log('Connected to server');
+      });
+
+      this.socket.on('disconnect', () => {
+        console.log('Disconnected from server');
       });
     },
 
     handlePlayerDeath(data = {}) {
       if (this.gameOver) return;
 
+      console.log('Handling player death');
       this.gameOver = true;
       this.gameStarted = false;
       this.finalMass = this.currentPlayer?.mass || 0;
@@ -131,27 +136,25 @@ function gameApp() {
         this.playerName = 'Anonymous';
       }
       
-      // Uisti sa, že socket je pripojený
-      if (!this.socket || !this.socket.connected) {
-        this.init();
-      }
-      
+      console.log('Starting game with name:', this.playerName);
       this.gameStarted = true;
       this.gameOver = false;
       this.finalMass = 0;
       this.finalPosition = 0;
       this.eatenBy = '';
+      this.playerInitialized = false; // Resetovať pred novou hrou
       this.interpolatedPlayers.clear();
       this.socket.emit('join', this.playerName);
     },
 
     restartGame() {
+      console.log('Restarting game');
       this.gameOver = false;
       this.startGame();
     },
 
     backToMenu() {
-      console.log('Returning to main menu...');
+      console.log('Returning to main menu');
       
       // Reset všetkých stavových premenných
       this.gameStarted = false;
@@ -165,9 +168,7 @@ function gameApp() {
       this.finalMass = 0;
       this.finalPosition = 0;
       this.eatenBy = '';
-      
-      // NEODPOJOVAŤ SOCKET - len resetovať stav
-      // Socket ostáva pripojený pre budúce hry
+      this.playerInitialized = false;
       
       // Vyčistiť canvas
       if (this.canvas && this.ctx) {
@@ -178,10 +179,9 @@ function gameApp() {
       console.log('Successfully returned to main menu');
     },
 
+    // ... (zvyšok kódu zostáva rovnaký)
     initCanvas() {
       this.canvas = document.getElementById('gameCanvas');
-      if (!this.canvas) return;
-      
       this.ctx = this.canvas.getContext('2d');
       this.resizeCanvas();
 
@@ -204,7 +204,6 @@ function gameApp() {
     },
 
     resizeCanvas() {
-      if (!this.canvas) return;
       this.canvas.width = window.innerWidth;
       this.canvas.height = window.innerHeight;
     },
