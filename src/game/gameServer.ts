@@ -242,50 +242,55 @@ export class GameServer {
   }
 
   private checkCollisions(): void {
-    // Player-food kolízie
-    for (const [playerId, player] of this.players) {
-      for (const [foodId, foodItem] of this.food) {
-        const dx = player.x - foodItem.x;
-        const dy = player.y - foodItem.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
+  // Player-food collisions
+  for (const [playerId, player] of this.players) {
+    for (const [foodId, foodItem] of this.food) {
+      const dx = player.x - foodItem.x;
+      const dy = player.y - foodItem.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
 
-        if (distance < player.radius) {
-          this.food.delete(foodId);
-          player.mass += foodItem.radius * 0.5;
-          player.radius = this.massToRadius(player.mass);
-          this.spawnFood();
-        }
+      if (distance < player.radius) {
+        this.food.delete(foodId);
+        player.mass += foodItem.radius * 0.5;
+        player.radius = this.massToRadius(player.mass);
+        this.spawnFood();
       }
+    }
 
-      // Player-player kolízie
-      for (const [otherPlayerId, otherPlayer] of this.players) {
-        if (playerId === otherPlayerId) continue;
+    // Player-player collisions
+    for (const [otherPlayerId, otherPlayer] of this.players) {
+      if (playerId === otherPlayerId) continue;
 
-        const dx = player.x - otherPlayer.x;
-        const dy = player.y - otherPlayer.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        const radiusDiff = Math.abs(player.radius - otherPlayer.radius);
+      const dx = player.x - otherPlayer.x;
+      const dy = player.y - otherPlayer.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      const radiusDiff = Math.abs(player.radius - otherPlayer.radius);
 
-        if (distance < radiusDiff * 0.7) {
-          if (player.mass > otherPlayer.mass * 1.15) {
-            // Hráč zje druhého
-            player.mass += otherPlayer.mass * 0.8;
-            player.radius = this.massToRadius(player.mass);
-            
-            // Respawn
-            otherPlayer.x = Math.random() * this.WORLD_WIDTH;
-            otherPlayer.y = Math.random() * this.WORLD_HEIGHT;
-            otherPlayer.mass = this.BASE_RADIUS;
-            otherPlayer.radius = this.BASE_RADIUS;
-
-            if (!otherPlayer.isBot) {
-              this.io.to(otherPlayerId).emit('eaten');
-            }
+      if (distance < radiusDiff * 0.7) {
+        if (player.mass > otherPlayer.mass * 1.15) {
+          // Player eats other player
+          player.mass += otherPlayer.mass * 0.8;
+          player.radius = this.massToRadius(player.mass);
+          
+          // Notify about death
+          if (!otherPlayer.isBot) {
+            this.io.to(otherPlayerId).emit('playerDeath', {
+              playerId: otherPlayerId,
+              eatenBy: player.name,
+              finalMass: otherPlayer.mass
+            });
           }
+
+          // Respawn
+          otherPlayer.x = Math.random() * this.WORLD_WIDTH;
+          otherPlayer.y = Math.random() * this.WORLD_HEIGHT;
+          otherPlayer.mass = this.BASE_RADIUS;
+          otherPlayer.radius = this.BASE_RADIUS;
         }
       }
     }
   }
+}
 
   private startGameLoop(): void {
     const targetFPS = 60;

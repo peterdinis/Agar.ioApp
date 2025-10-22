@@ -12,7 +12,7 @@
 <body>
   <div x-data="gameApp()" x-init="init()">
     <!-- Menu Screen -->
-    <div x-show="!gameStarted" class="menu-screen">
+    <div x-show="!gameStarted && !gameOver" class="menu-screen">
       <div class="menu-container">
         <h1 class="game-title">Agar.io Clone</h1>
         <div class="mb-3">
@@ -33,7 +33,7 @@
     </div>
 
     <!-- Game Screen -->
-    <div x-show="gameStarted" class="game-screen">
+    <div x-show="gameStarted && !gameOver" class="game-screen">
       <!-- HUD -->
       <div class="hud">
         <div class="stats">
@@ -47,7 +47,7 @@
         <div class="leaderboard">
           <h5>Leaderboard</h5>
           <template x-for="(player, idx) in leaderboard" :key="player.id">
-            <div class="leaderboard-item">
+            <div class="leaderboard-item" :class="{ 'current-player': player.id === currentPlayer?.id }">
               <span x-text="`${idx + 1}. ${player.name}`"></span>
               <span x-text="Math.floor(player.mass)"></span>
             </div>
@@ -57,6 +57,37 @@
 
       <!-- Canvas -->
       <canvas id="gameCanvas"></canvas>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div x-show="gameOver" class="game-over-screen">
+      <div class="game-over-container">
+        <div class="game-over-card">
+          <h1 class="game-over-title">Game Over!</h1>
+          <div class="game-over-stats">
+            <div class="stat">
+              <span class="stat-label">Final Mass:</span>
+              <span class="stat-value" x-text="Math.floor(finalMass)"></span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Position:</span>
+              <span class="stat-value" x-text="finalPosition"></span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Eaten by:</span>
+              <span class="stat-value" x-text="eatenBy || 'Unknown'"></span>
+            </div>
+          </div>
+          <div class="game-over-actions">
+            <button class="btn btn-primary btn-lg" @click="restartGame()">
+              Play Again
+            </button>
+            <button class="btn btn-outline-secondary btn-lg" @click="backToMenu()">
+              Main Menu
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
