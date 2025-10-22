@@ -14,9 +14,14 @@ function gameApp() {
     mouse: { x: 0, y: 0 },
     worldWidth: 5000,
     worldHeight: 5000,
+    lastRender: 0,
+    interpolatedPlayers: new Map(),
 
     init() {
-      this.socket = io();
+      this.socket = io({
+        transports: ['websocket'],
+        upgrade: false,
+      });
       this.setupSocketListeners();
     },
 
@@ -40,6 +45,19 @@ function gameApp() {
         }
 
         this.updateLeaderboard();
+        this.updateInterpolation();
+      });
+
+      this.socket.on('eaten', () => {
+        console.log('You were eaten!');
+      });
+    },
+
+    updateInterpolation() {
+      this.players.forEach(p => {
+        if (!this.interpolatedPlayers.has(p.id)) {
+          this.interpolatedPlayers.set(p.id, { x: p.x, y: p.y, radius: p.radius });
+        }
       });
     },
 
@@ -70,15 +88,20 @@ function gameApp() {
     },
 
     startGameLoop() {
-      const loop = () => {
-        this.update();
+      const loop = (timestamp) => {
+        if (!this.lastRender) this.lastRender = timestamp;
+        const delta = timestamp - this.lastRender;
+        
+        this.update(delta);
         this.render();
+        
+        this.lastRender = timestamp;
         requestAnimationFrame(loop);
       };
-      loop();
+      requestAnimationFrame(loop);
     },
 
-    update() {
+    update(delta) {
       if (!this.currentPlayer) return;
 
       const targetX = this.camera.x + this.mouse.x;
@@ -86,8 +109,23 @@ function gameApp() {
 
       this.socket.emit('move', { x: targetX, y: targetY });
 
-      this.camera.x = this.currentPlayer.x - this.canvas.width / 2;
-      this.camera.y = this.currentPlayer.y - this.canvas.height / 2;
+      // Plynulá interpolácia kamery
+      const lerpFactor = 0.1;
+      const targetCameraX = this.currentPlayer.x - this.canvas.width / 2;
+      const targetCameraY = this.currentPlayer.y - this.canvas.height / 2;
+      
+      this.camera.x += (targetCameraX - this.camera.x) * lerpFactor;
+      this.camera.y += (targetCameraY - this.camera.y) * lerpFactor;
+
+      // Interpolácia pozícií hráčov
+      this.players.forEach(p => {
+        const interp = this.interpolatedPlayers.get(p.id);
+        if (interp) {
+          interp.x += (p.x - interp.x) * 0.3;
+          interp.y += (p.y - interp.y) * 0.3;
+          interp.radius += (p.radius - interp.radius) * 0.2;
+        }
+      });
     },
 
     render() {
@@ -100,8 +138,17 @@ function gameApp() {
       this.ctx.translate(-this.camera.x, -this.camera.y);
 
       this.drawGrid();
-      this.drawFood();
-      this.drawPlayers();
+      
+      // Kresli len viditeľné objekty
+      const viewBounds = {
+        left: this.camera.x - 100,
+        right: this.camera.x + this.canvas.width + 100,
+        top: this.camera.y - 100,
+        bottom: this.camera.y + this.canvas.height + 100,
+      };
+
+      this.drawFood(viewBounds);
+      this.drawPlayers(viewBounds);
 
       this.ctx.restore();
     },
@@ -115,24 +162,26 @@ function gameApp() {
 
       this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
       this.ctx.lineWidth = 1;
+      this.ctx.beginPath();
 
       for (let x = startX; x < endX; x += gridSize) {
-        this.ctx.beginPath();
         this.ctx.moveTo(x, this.camera.y);
         this.ctx.lineTo(x, this.camera.y + this.canvas.height);
-        this.ctx.stroke();
       }
 
       for (let y = startY; y < endY; y += gridSize) {
-        this.ctx.beginPath();
         this.ctx.moveTo(this.camera.x, y);
         this.ctx.lineTo(this.camera.x + this.canvas.width, y);
-        this.ctx.stroke();
       }
+
+      this.ctx.stroke();
     },
 
-    drawFood() {
+    drawFood(bounds) {
       this.food.forEach(f => {
+        if (f.x < bounds.left || f.x > bounds.right || 
+            f.y < bounds.top || f.y > bounds.bottom) return;
+
         this.ctx.fillStyle = f.color;
         this.ctx.beginPath();
         this.ctx.arc(f.x, f.y, f.radius, 0, Math.PI * 2);
@@ -140,28 +189,54 @@ function gameApp() {
       });
     },
 
-    drawPlayers() {
-      this.players.forEach(p => {
+    drawPlayers(bounds) {
+      // Zoraď hráčov podľa veľkosti (menší navrch)
+      const sortedPlayers = [...this.players].sort((a, b) => a.radius - b.radius);
+
+      sortedPlayers.forEach(p => {
+        const interp = this.interpolatedPlayers.get(p.id);
+        const x = interp ? interp.x : p.x;
+        const y = interp ? interp.y : p.y;
+        const radius = interp ? interp.radius : p.radius;
+
+        if (x - radius > bounds.right || x + radius < bounds.left ||
+            y - radius > bounds.bottom || y + radius < bounds.top) return;
+
+        // Telo
         this.ctx.fillStyle = p.color;
         this.ctx.beginPath();
-        this.ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        this.ctx.arc(x, y, radius, 0, Math.PI * 2);
         this.ctx.fill();
 
+        // Okraj
         this.ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
         this.ctx.lineWidth = 3;
         this.ctx.stroke();
 
+        // Zvýraznenie vlastného hráča
         if (p.id === this.currentPlayer.id) {
           this.ctx.strokeStyle = '#fff';
-          this.ctx.lineWidth = 4;
+          this.ctx.lineWidth = 5;
           this.ctx.stroke();
         }
 
+        // Meno
         this.ctx.fillStyle = '#fff';
-        this.ctx.font = `bold ${Math.max(12, p.radius / 3)}px Arial`;
+        this.ctx.strokeStyle = '#000';
+        this.ctx.lineWidth = 3;
+        const fontSize = Math.max(14, radius / 2.5);
+        this.ctx.font = `bold ${fontSize}px Arial`;
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
-        this.ctx.fillText(p.name, p.x, p.y);
+        this.ctx.strokeText(p.name, x, y);
+        this.ctx.fillText(p.name, x, y);
+
+        // Bot označenie
+        if (p.isBot) {
+          this.ctx.font = `${fontSize * 0.6}px Arial`;
+          this.ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+          this.ctx.fillText('BOT', x, y + fontSize + 5);
+        }
       });
     },
 
