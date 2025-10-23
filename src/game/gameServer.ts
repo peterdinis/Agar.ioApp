@@ -1,5 +1,9 @@
 import { Server, Socket } from "socket.io";
 
+/**
+ * Represents a player in the game
+ * @interface Player
+ */
 interface Player {
 	id: string;
 	x: number;
@@ -23,6 +27,10 @@ interface Player {
 	quadrant?: string;
 }
 
+/**
+ * Represents food in the game world
+ * @interface Food
+ */
 interface Food {
 	id: string;
 	x: number;
@@ -32,6 +40,10 @@ interface Food {
 	quadrant: string;
 }
 
+/**
+ * Represents a spatial partitioning quadrant for optimization
+ * @interface Quadrant
+ */
 interface Quadrant {
 	x: number;
 	y: number;
@@ -41,6 +53,10 @@ interface Quadrant {
 	food: Set<string>;
 }
 
+/**
+ * Main game server class that handles game logic, player management, and real-time communication
+ * @class GameServer
+ */
 export class GameServer {
 	private io: Server;
 	private players: Map<string, Player> = new Map();
@@ -57,13 +73,18 @@ export class GameServer {
 	private readonly PLAYER_SPEED = 15;
 	private readonly MIN_SPLIT_MASS = 50;
 
-	// Optimalizácia: Spatial partitioning
+	// Optimization: Spatial partitioning
 	private readonly QUADRANT_SIZE = 500;
 	private quadrants: Map<string, Quadrant> = new Map();
 	private readonly MAX_PLAYERS = 1000;
 	private readonly UPDATE_RATE = 60; // FPS
-	private readonly BROADCAST_RATE = 20; // FPS pre klientov
+	private readonly BROADCAST_RATE = 20; // FPS for clients
 
+	/**
+	 * Creates a new GameServer instance
+	 * @constructor
+	 * @param {Server} io - Socket.IO server instance
+	 */
 	constructor(io: Server) {
 		this.io = io;
 		this.initializeQuadrants();
@@ -72,6 +93,10 @@ export class GameServer {
 		this.startGameLoop();
 	}
 
+	/**
+	 * Initializes spatial partitioning quadrants for optimization
+	 * @private
+	 */
 	private initializeQuadrants(): void {
 		const cols = Math.ceil(this.WORLD_WIDTH / this.QUADRANT_SIZE);
 		const rows = Math.ceil(this.WORLD_HEIGHT / this.QUADRANT_SIZE);
@@ -91,12 +116,26 @@ export class GameServer {
 		}
 	}
 
+	/**
+	 * Gets the quadrant ID for a given position
+	 * @private
+	 * @param {number} x - X coordinate
+	 * @param {number} y - Y coordinate
+	 * @returns {string} Quadrant ID
+	 */
 	private getQuadrantId(x: number, y: number): string {
 		const col = Math.floor(x / this.QUADRANT_SIZE);
 		const row = Math.floor(y / this.QUADRANT_SIZE);
 		return `${col}_${row}`;
 	}
 
+	/**
+	 * Updates a player's quadrant position for spatial partitioning
+	 * @private
+	 * @param {string} playerId - The ID of the player to update
+	 * @param {number} [oldX] - Previous X coordinate (optional)
+	 * @param {number} [oldY] - Previous Y coordinate (optional)
+	 */
 	private updatePlayerQuadrant(
 		playerId: string,
 		oldX?: number,
@@ -107,7 +146,7 @@ export class GameServer {
 
 		const newQuadrantId = this.getQuadrantId(player.x, player.y);
 
-		// Odstrániť zo starého kvadrantu
+		// Remove from old quadrant
 		if (oldX !== undefined && oldY !== undefined) {
 			const oldQuadrantId = this.getQuadrantId(oldX, oldY);
 			if (oldQuadrantId !== newQuadrantId) {
@@ -118,7 +157,7 @@ export class GameServer {
 			}
 		}
 
-		// Pridať do nového kvadrantu
+		// Add to new quadrant
 		const newQuadrant = this.quadrants.get(newQuadrantId);
 		if (newQuadrant) {
 			newQuadrant.players.add(playerId);
@@ -127,6 +166,11 @@ export class GameServer {
 		player.quadrant = newQuadrantId;
 	}
 
+	/**
+	 * Updates a food item's quadrant position
+	 * @private
+	 * @param {string} foodId - The ID of the food item to update
+	 */
 	private updateFoodQuadrant(foodId: string): void {
 		const food = this.food.get(foodId);
 		if (!food) return;
@@ -140,12 +184,20 @@ export class GameServer {
 		}
 	}
 
+	/**
+	 * Initializes the food items in the game world
+	 * @private
+	 */
 	private initializeFood(): void {
 		for (let i = 0; i < this.FOOD_COUNT; i++) {
 			this.spawnFood();
 		}
 	}
 
+	/**
+	 * Spawns a new food item at a random position
+	 * @private
+	 */
 	private spawnFood(): void {
 		const food: Food = {
 			id: `food_${Date.now()}_${Math.random()}`,
@@ -162,6 +214,13 @@ export class GameServer {
 		this.updateFoodQuadrant(food.id);
 	}
 
+	/**
+	 * Moves a player towards a target position
+	 * @private
+	 * @param {Player} player - The player to move
+	 * @param {number} targetX - Target X coordinate
+	 * @param {number} targetY - Target Y coordinate
+	 */
 	private movePlayerTowardsTarget(
 		player: Player,
 		targetX: number,
@@ -194,13 +253,20 @@ export class GameServer {
 
 			player.lastMoveTime = Date.now();
 
-			// Aktualizovať kvadrant ak sa pohla
+			// Update quadrant if player moved significantly
 			if (Math.abs(oldX - player.x) > 1 || Math.abs(oldY - player.y) > 1) {
 				this.updatePlayerQuadrant(player.id, oldX, oldY);
 			}
 		}
 	}
 
+	/**
+	 * Moves all parts of a player (including split parts) towards a target
+	 * @private
+	 * @param {string} playerId - The main player ID
+	 * @param {number} targetX - Target X coordinate
+	 * @param {number} targetY - Target Y coordinate
+	 */
 	private moveAllPlayerParts(
 		playerId: string,
 		targetX: number,
@@ -226,6 +292,12 @@ export class GameServer {
 		});
 	}
 
+	/**
+	 * Gets all parts of a player (main player + split parts)
+	 * @private
+	 * @param {string} playerId - The main player ID
+	 * @returns {Player[]} Array of all player parts
+	 */
 	private getAllPlayerParts(playerId: string): Player[] {
 		const parts: Player[] = [];
 		const mainPlayer = this.players.get(playerId);
@@ -242,7 +314,7 @@ export class GameServer {
 				});
 			}
 
-			// Optimalizácia: Použiť Map pre rýchlejší lookup
+			// Optimization: Use Map for faster lookup
 			for (const [id, player] of this.players) {
 				if (player.parentId === playerId) {
 					parts.push(player);
@@ -253,10 +325,24 @@ export class GameServer {
 		return parts;
 	}
 
+	/**
+	 * Calculates the distance between two points
+	 * @private
+	 * @param {number} x1 - First point X coordinate
+	 * @param {number} y1 - First point Y coordinate
+	 * @param {number} x2 - Second point X coordinate
+	 * @param {number} y2 - Second point Y coordinate
+	 * @returns {number} Distance between the two points
+	 */
 	private distance(x1: number, y1: number, x2: number, y2: number): number {
 		return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
 	}
 
+	/**
+	 * Generates a random color for players and food
+	 * @private
+	 * @returns {string} Hex color code
+	 */
 	private getRandomColor(): string {
 		const colors = [
 			"#FF6B6B",
@@ -283,21 +369,36 @@ export class GameServer {
 		return colors[Math.floor(Math.random() * colors.length)];
 	}
 
+	/**
+	 * Converts mass to radius for players and food
+	 * @private
+	 * @param {number} mass - The mass value
+	 * @returns {number} Calculated radius
+	 */
 	private massToRadius(mass: number): number {
 		return Math.sqrt(mass) * 1.5;
 	}
 
+	/**
+	 * Sets up Socket.IO event handlers for client connections
+	 * @private
+	 */
 	private setupSocketHandlers(): void {
 		this.io.on("connection", (socket: Socket) => {
 			console.log(`Player connected: ${socket.id}`);
 
-			// Kontrola maximálneho počtu hráčov
+			// Check maximum player limit
 			if (this.players.size >= this.MAX_PLAYERS) {
 				socket.emit("serverFull");
 				socket.disconnect();
 				return;
 			}
 
+			/**
+			 * Handles player joining the game
+			 * @event join
+			 * @param {string} name - Player name
+			 */
 			socket.on("join", (name: string) => {
 				if (this.players.has(socket.id)) {
 					this.players.delete(socket.id);
@@ -335,6 +436,13 @@ export class GameServer {
 				);
 			});
 
+			/**
+			 * Handles player movement
+			 * @event move
+			 * @param {Object} data - Movement data
+			 * @param {number} data.x - Target X coordinate
+			 * @param {number} data.y - Target Y coordinate
+			 */
 			socket.on("move", (data: { x: number; y: number }) => {
 				const player = this.players.get(socket.id);
 				if (!player || player.isBot) return;
@@ -342,10 +450,18 @@ export class GameServer {
 				this.moveAllPlayerParts(socket.id, data.x, data.y);
 			});
 
+			/**
+			 * Handles player splitting
+			 * @event split
+			 */
 			socket.on("split", () => {
 				this.handleSplit(socket.id);
 			});
 
+			/**
+			 * Handles player disconnection
+			 * @event disconnect
+			 */
 			socket.on("disconnect", () => {
 				const player = this.players.get(socket.id);
 				if (player && !player.isBot) {
@@ -356,7 +472,7 @@ export class GameServer {
 					}
 					this.players.delete(socket.id);
 
-					// Odstrániť z kvadrantu
+					// Remove from quadrant
 					if (player.quadrant) {
 						const quadrant = this.quadrants.get(player.quadrant);
 						if (quadrant) {
@@ -372,6 +488,11 @@ export class GameServer {
 		});
 	}
 
+	/**
+	 * Handles player splitting logic
+	 * @private
+	 * @param {string} playerId - The ID of the player to split
+	 */
 	private handleSplit(playerId: string): void {
 		const player = this.players.get(playerId);
 		if (!player || player.mass < this.MIN_SPLIT_MASS) return;
@@ -418,6 +539,10 @@ export class GameServer {
 		);
 	}
 
+	/**
+	 * Checks for and handles player part merging
+	 * @private
+	 */
 	private checkMerge(): void {
 		const playersArray = Array.from(this.players.entries());
 
@@ -443,7 +568,7 @@ export class GameServer {
 
 					this.players.delete(playerId);
 
-					// Odstrániť z kvadrantu
+					// Remove from quadrant
 					if (player.quadrant) {
 						const quadrant = this.quadrants.get(player.quadrant);
 						if (quadrant) {
@@ -455,14 +580,18 @@ export class GameServer {
 		}
 	}
 
+	/**
+	 * Checks for collisions between players and food, and between players
+	 * @private
+	 */
 	private checkCollisions(): void {
-		// Optimalizácia: Kontrolovať kolízie iba v susedných kvadrantoch
+		// Optimization: Check collisions only in neighboring quadrants
 		const processedPairs = new Set<string>();
 
 		for (const [quadrantId, quadrant] of this.quadrants) {
 			const playerIds = Array.from(quadrant.players);
 
-			// Kolízie hráčov s jedlom v ich kvadrante
+			// Player-food collisions in their quadrant
 			for (const playerId of playerIds) {
 				const player = this.players.get(playerId);
 				if (!player) continue;
@@ -487,7 +616,7 @@ export class GameServer {
 					}
 				}
 
-				// Kolízie medzi hráčmi v rovnakom kvadrante
+				// Player-player collisions in the same quadrant
 				for (const otherPlayerId of playerIds) {
 					if (playerId === otherPlayerId) continue;
 
@@ -505,6 +634,12 @@ export class GameServer {
 		}
 	}
 
+	/**
+	 * Checks collision between two specific players
+	 * @private
+	 * @param {Player} player - First player
+	 * @param {Player} otherPlayer - Second player
+	 */
 	private checkPlayerCollision(player: Player, otherPlayer: Player): void {
 		const samePlayer =
 			(player.parentId &&
@@ -534,6 +669,12 @@ export class GameServer {
 		}
 	}
 
+	/**
+	 * Handles the logic when one player eats another
+	 * @private
+	 * @param {Player} eaten - The player being eaten
+	 * @param {Player} eater - The player doing the eating
+	 */
 	private handlePlayerEaten(eaten: Player, eater: Player): void {
 		const massGain = eaten.mass * 0.8;
 		eater.mass += massGain;
@@ -559,6 +700,10 @@ export class GameServer {
 		this.updatePlayerQuadrant(eaten.id);
 	}
 
+	/**
+	 * Starts the main game loop for updating game state and broadcasting to clients
+	 * @private
+	 */
 	private startGameLoop(): void {
 		const targetFrameTime = 1000 / this.UPDATE_RATE;
 		const targetBroadcastTime = 1000 / this.BROADCAST_RATE;
@@ -577,7 +722,7 @@ export class GameServer {
 				this.checkMerge();
 			}
 
-			// Broadcast game state (menej často)
+			// Broadcast game state (less frequently)
 			if (currentTime - lastBroadcastTime >= targetBroadcastTime) {
 				lastBroadcastTime = currentTime;
 
@@ -604,7 +749,7 @@ export class GameServer {
 					})),
 				};
 
-				// Použiť volatile pre menej dôležité updaty
+				// Use volatile for less important updates
 				this.io.volatile.emit("gameUpdate", gameState);
 			}
 
