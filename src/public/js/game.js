@@ -1,13 +1,13 @@
 /**
  * Agar.io Clone - Main Game Application
- * 
+ *
  * This Alpine.js component manages the entire game lifecycle including:
  * - Game state management
  * - Socket.IO communication
  * - Canvas rendering and optimization
  * - User input handling
  * - Performance monitoring
- * 
+ *
  * @returns {Object} Alpine.js component object
  */
 function gameApp() {

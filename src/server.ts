@@ -26,7 +26,7 @@ const io = new Server(httpServer);
 /**
  * Handlebars template engine setup
  * Configures Express to use Handlebars as the view engine
- * 
+ *
  * @configuration
  * - defaultLayout: false - No default layout to keep it simple
  * - extname: ".handlebars" - File extension for Handlebars templates
@@ -87,7 +87,7 @@ app.use(express.static(publicPath));
 /**
  * Root route handler
  * Renders the main game page using Handlebars template
- * 
+ *
  * @route GET /
  * @param {express.Request} req - Express request object
  * @param {express.Response} res - Express response object
@@ -113,7 +113,7 @@ const PORT = process.env.PORT || 3000;
 /**
  * Start the HTTP server
  * Listens on the configured port and logs server status
- * 
+ *
  * @event listening - Emitted when server starts successfully
  * @callback - Executed when server is ready to accept connections
  */
@@ -130,8 +130,8 @@ httpServer.listen(PORT, () => {
  * Handle uncaught exceptions to prevent server crashes
  * @event uncaughtException
  */
-process.on('uncaughtException', (error) => {
-	console.error('Uncaught Exception:', error);
+process.on("uncaughtException", (error) => {
+	console.error("Uncaught Exception:", error);
 	// Perform cleanup if needed
 	process.exit(1);
 });
@@ -140,8 +140,8 @@ process.on('uncaughtException', (error) => {
  * Handle unhandled promise rejections
  * @event unhandledRejection
  */
-process.on('unhandledRejection', (reason, promise) => {
-	console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+process.on("unhandledRejection", (reason, promise) => {
+	console.error("Unhandled Rejection at:", promise, "reason:", reason);
 	// Application specific logging, throwing an error, or other logic here
 });
 
@@ -151,18 +151,18 @@ process.on('unhandledRejection', (reason, promise) => {
  * @event SIGINT - Interrupt signal (Ctrl+C)
  * @event SIGTERM - Termination signal
  */
-process.on('SIGINT', () => {
-	console.log('\nReceived SIGINT. Shutting down gracefully...');
+process.on("SIGINT", () => {
+	console.log("\nReceived SIGINT. Shutting down gracefully...");
 	httpServer.close(() => {
-		console.log('HTTP server closed.');
+		console.log("HTTP server closed.");
 		process.exit(0);
 	});
 });
 
-process.on('SIGTERM', () => {
-	console.log('Received SIGTERM. Shutting down gracefully...');
+process.on("SIGTERM", () => {
+	console.log("Received SIGTERM. Shutting down gracefully...");
 	httpServer.close(() => {
-		console.log('HTTP server closed.');
+		console.log("HTTP server closed.");
 		process.exit(0);
 	});
 });
