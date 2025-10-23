@@ -1,10 +1,12 @@
 import request from "supertest";
-import { io as ioc, Socket as ClientSocket } from "socket.io-client";
+import { io as ioc } from "socket.io-client";
 import { TestUtils } from "./utils/test-utils";
-import { GameServer } from "../src/game/gameServer";
+import { Server } from "http";
+import { GameServer } from "../game/gameServer";
+import { Application } from "express";
 
 describe("Full Integration Test", () => {
-	let app: Express.Application;
+	let app: Application;
 	let server: Server;
 	let io: any;
 	let gameServer: GameServer;
