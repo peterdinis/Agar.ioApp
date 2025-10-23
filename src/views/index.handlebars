@@ -1,52 +1,20 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <!--
-    Agar.io Clone - Main HTML Document
-    This file defines the structure and layout of the Agar.io clone game.
-    It includes all necessary dependencies and Alpine.js components.
-  -->
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Agar.io Clone</title>
-  
-  <!--
-    External Dependencies:
-    - Bootstrap 5.3.0: For responsive UI components and styling
-    - Alpine.js 3.x: For reactive UI state management
-    - Socket.IO Client: For real-time WebSocket communication with game server
-    - Custom CSS: Game-specific styles and animations
-  -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <script src="/socket.io/socket.io.js"></script>
   <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
-  <!--
-    Main Game Application Container
-    Uses Alpine.js for reactive state management and game logic
-    x-data: Initializes the gameApp component with game state and methods
-    x-init: Calls the init() method when component is mounted
-  -->
   <div x-data="gameApp()" x-init="init()">
-    
-    <!--
-      Main Menu Screen
-      Displayed when game is not started and not in game over state
-      Contains player name input and start game button
-    -->
+    <!-- Menu Screen -->
     <div x-show="!gameStarted && !gameOver" class="menu-screen">
       <div class="menu-container">
-        <!-- Game Title -->
         <h1 class="game-title">Agar.io Clone</h1>
-        
-        <!--
-          Player Name Input
-          x-model: Two-way data binding with playerName state
-          @keyup.enter: Starts game when Enter key is pressed
-          maxlength: Limits player name to 15 characters
-        -->
         <div class="mb-3">
           <input 
             type="text" 
@@ -56,11 +24,6 @@
             @keyup.enter="startGame()"
             maxlength="15">
         </div>
-        
-        <!--
-          Play Button
-          @click: Calls startGame() method to begin the game
-        -->
         <button 
           class="btn btn-primary btn-lg"
           @click="startGame()">
@@ -69,25 +32,10 @@
       </div>
     </div>
 
-    <!--
-      Game Screen
-      Displayed when game is actively running
-      Contains HUD (Heads-Up Display) and game canvas
-    -->
+    <!-- Game Screen -->
     <div x-show="gameStarted && !gameOver" class="game-screen">
-      
-      <!--
-        HUD (Heads-Up Display)
-        Shows game statistics and leaderboard in real-time
-        Uses pointer-events: none to allow clicks to pass through to canvas
-      -->
+      <!-- HUD -->
       <div class="hud">
-        
-        <!--
-          Player Statistics Panel
-          Displays current player mass and total player count
-          x-text: Reactively updates with current game state
-        -->
         <div class="stats">
           <div class="stat-item">
             <strong>Mass:</strong> <span x-text="Math.floor(currentPlayer?.mass || 0)"></span>
@@ -96,22 +44,9 @@
             <strong>Players:</strong> <span x-text="playerCount"></span>
           </div>
         </div>
-        
-        <!--
-          Leaderboard Panel
-          Shows top 10 players ranked by mass
-          Highlights current player with special styling
-        -->
         <div class="leaderboard">
           <h5>Leaderboard</h5>
           <div class="leaderboard-items">
-            
-            <!--
-              Leaderboard Items Loop
-              Iterates through top players and displays their rank, name, and mass
-              :key: Unique identifier for Alpine.js rendering optimization
-              :class: Conditionally applies 'current-player' class for highlighting
-            -->
             <template x-for="(player, idx) in leaderboard" :key="player.id">
               <div class="leaderboard-item" :class="{ 'current-player': player.id === currentPlayer?.id }">
                 <span class="leaderboard-name" x-text="`${idx + 1}. ${player.name}`"></span>
@@ -122,31 +57,15 @@
         </div>
       </div>
 
-      <!--
-        Game Canvas
-        The main rendering surface for the game
-        All game objects (players, food, viruses) are drawn here
-        Uses cursor: none to hide default cursor for immersive experience
-      -->
+      <!-- Canvas -->
       <canvas id="gameCanvas"></canvas>
     </div>
 
-    <!--
-      Game Over Screen
-      Displayed when player is eliminated from the game
-      Shows final statistics and provides options to restart or return to menu
-    -->
+    <!-- Game Over Screen -->
     <div x-show="gameOver" class="game-over-screen">
       <div class="game-over-container">
         <div class="game-over-card">
-          
-          <!-- Game Over Title -->
           <h1 class="game-over-title">Game Over!</h1>
-          
-          <!--
-            Final Statistics
-            Displays player's final mass, leaderboard position, and who eliminated them
-          -->
           <div class="game-over-stats">
             <div class="stat">
               <span class="stat-label">Final Mass:</span>
@@ -161,25 +80,10 @@
               <span class="stat-value" x-text="eatenBy || 'Unknown'"></span>
             </div>
           </div>
-          
-          <!--
-            Game Over Actions
-            Provides buttons to restart game or return to main menu
-          -->
           <div class="game-over-actions">
-            
-            <!--
-              Play Again Button
-              @click: Calls restartGame() method to start a new game session
-            -->
             <button class="btn btn-primary btn-lg" @click="restartGame()">
               Play Again
             </button>
-            
-            <!--
-              Main Menu Button
-              @click: Calls backToMenu() method to return to main menu
-            -->
             <button class="btn btn-outline-secondary btn-lg" @click="backToMenu()">
               Main Menu
             </button>
@@ -189,11 +93,6 @@
     </div>
   </div>
 
-  <!--
-    Game Logic Script
-    Contains the main game application logic, rendering, and Socket.IO communication
-    This script defines the gameApp() Alpine.js component
-  -->
   <script src="/js/game.js"></script>
 </body>
 </html>
