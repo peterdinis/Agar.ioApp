@@ -192,13 +192,9 @@ export class GameServer {
     const distance = Math.sqrt(dx * dx + dy * dy);
 
     if (distance > 10) {
-      // ROVNAKÁ RÝCHLOSŤ AKO HRÁČ
-      let baseSpeed = Math.max(3, 12 - bot.mass / 40);
+      // POMALŠIA RÝCHLOSŤ PRE BOTOV
+      let baseSpeed = Math.max(2, 8 - bot.mass / 50); // Boti pomalší
       
-      // Odstránené bonusy za správanie - všetci majú rovnakú rýchlosť
-      // if (bot.behavior === 'hunter') baseSpeed *= 1.2;
-      // if (bot.behavior === 'prey') baseSpeed *= 0.9;
-
       const speed = baseSpeed * (deltaTime / 16.67);
       const moveX = (dx / distance) * speed;
       const moveY = (dy / distance) * speed;
@@ -296,8 +292,8 @@ export class GameServer {
         const distance = Math.sqrt(dx * dx + dy * dy);
 
         if (distance > 0) {
-          // ROVNAKÁ RÝCHLOSŤ AKO BOTI
-          const speed = Math.max(3, 12 - player.mass / 40);
+          // RÝCHLEJŠIA RÝCHLOSŤ PRE HRÁČA
+          const speed = Math.max(4, 15 - player.mass / 35); // Hráč rýchlejší
           const moveDistance = Math.min(speed, distance);
           player.x += (dx / distance) * moveDistance;
           player.y += (dy / distance) * moveDistance;
