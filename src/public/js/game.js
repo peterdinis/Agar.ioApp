@@ -18,6 +18,7 @@ function gameApp() {
     lastRender: 0,
     interpolatedPlayers: new Map(),
     finalMass: 0,
+    finalScore: 0, // ZMENENÉ: finalScore namiesto finalMass
     finalPosition: 0,
     eatenBy: '',
     lastServerUpdate: 0,
@@ -98,7 +99,7 @@ function gameApp() {
     },
 
     splitPlayer() {
-      if (this.currentPlayer && this.currentPlayer.mass >= 50) { // Minimálna hmotnosť pre rozdelenie
+      if (this.currentPlayer && this.currentPlayer.mass >= 50) {
         this.socket.emit('split');
         console.log('Splitting player...');
       }
@@ -111,10 +112,11 @@ function gameApp() {
       this.gameOver = true;
       this.gameStarted = false;
       this.finalMass = this.currentPlayer?.mass || 0;
+      this.finalScore = data.finalScore || 0; // POUŽIŤ FINÁLNE SCORE
       this.eatenBy = data.eatenBy || 'Another player';
       
       const sortedPlayers = [...this.players]
-        .sort((a, b) => b.mass - a.mass);
+        .sort((a, b) => b.score - a.score);
       const position = sortedPlayers.findIndex(p => p.id === this.currentPlayer?.id) + 1;
       this.finalPosition = position > 0 ? `#${position}` : 'Unknown';
 
@@ -125,7 +127,7 @@ function gameApp() {
         }, 1000);
       }
 
-      console.log('Player died! Final mass:', this.finalMass);
+      console.log('Player died! Final score:', this.finalScore);
     },
 
     updateInterpolation() {
@@ -172,6 +174,7 @@ function gameApp() {
       this.gameStarted = true;
       this.gameOver = false;
       this.finalMass = 0;
+      this.finalScore = 0;
       this.finalPosition = 0;
       this.eatenBy = '';
       this.playerInitialized = false;
@@ -197,6 +200,7 @@ function gameApp() {
       this.leaderboard = [];
       this.interpolatedPlayers.clear();
       this.finalMass = 0;
+      this.finalScore = 0;
       this.finalPosition = 0;
       this.eatenBy = '';
       this.playerInitialized = false;
@@ -414,7 +418,7 @@ function gameApp() {
     },
 
     updateLeaderboard() {
-      // Zoskupiť všetky časti pod hlavných hráčov
+      // Zoskupiť všetky časti pod hlavných hráčov a spočítať celkové score
       const mainPlayers = new Map();
       
       this.players.forEach(player => {
@@ -424,14 +428,17 @@ function gameApp() {
             id: mainId,
             name: player.name,
             mass: 0,
+            score: 0,
             isBot: player.isBot
           });
         }
-        mainPlayers.get(mainId).mass += player.mass;
+        const mainPlayer = mainPlayers.get(mainId);
+        mainPlayer.mass += player.mass;
+        mainPlayer.score += player.score; // SČÍTAŤ SCORE VŠETKÝCH ČASTÍ
       });
 
       this.leaderboard = Array.from(mainPlayers.values())
-        .sort((a, b) => b.mass - a.mass)
+        .sort((a, b) => b.score - a.score) // ZORADIŤ PODĽA SCORE
         .slice(0, 10);
     }
   };

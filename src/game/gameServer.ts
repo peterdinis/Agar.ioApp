@@ -15,9 +15,10 @@ interface Player {
   behavior: 'hunter' | 'prey' | 'neutral';
   aggression: number;
   lastMoveTime?: number;
-  splitParts?: string[]; // ID častí po rozdelení
-  parentId?: string; // ID hlavného hráča
-  score: number; // SKUTOČNÉ SKÓRE
+  splitParts?: string[];
+  parentId?: string;
+  score: number;
+  isControlled: boolean;
 }
 
 interface Food {
@@ -38,11 +39,11 @@ export class GameServer {
   private readonly MIN_FOOD_RADIUS = 5;
   private readonly MAX_FOOD_RADIUS = 8;
   private readonly BASE_RADIUS = 20;
-  private readonly BASE_MASS = 100; // ZAČÍNA OD 100
+  private readonly BASE_MASS = 100;
   private lastUpdateTime = Date.now();
 
   private readonly PLAYER_SPEED = 15;
-  private readonly MIN_SPLIT_MASS = 50; // Minimálna hmotnosť pre rozdelenie
+  private readonly MIN_SPLIT_MASS = 50;
 
   constructor(io: Server) {
     this.io = io;
@@ -82,12 +83,58 @@ export class GameServer {
       player.x += moveX;
       player.y += moveY;
 
-      // Hranice sveta
       player.x = Math.max(player.radius, Math.min(this.WORLD_WIDTH - player.radius, player.x));
       player.y = Math.max(player.radius, Math.min(this.WORLD_HEIGHT - player.radius, player.y));
       
       player.lastMoveTime = Date.now();
     }
+  }
+
+  private moveAllPlayerParts(playerId: string, targetX: number, targetY: number): void {
+    const mainPlayer = this.players.get(playerId);
+    if (!mainPlayer) return;
+
+    const allParts = this.getAllPlayerParts(playerId);
+    
+    this.movePlayerTowardsTarget(mainPlayer, targetX, targetY);
+
+    allParts.forEach(part => {
+      if (part.id !== playerId) {
+        const relX = part.x - mainPlayer.x;
+        const relY = part.y - mainPlayer.y;
+        
+        const partTargetX = targetX + relX;
+        const partTargetY = targetY + relY;
+        
+        this.movePlayerTowardsTarget(part, partTargetX, partTargetY);
+      }
+    });
+  }
+
+  private getAllPlayerParts(playerId: string): Player[] {
+    const parts: Player[] = [];
+    const mainPlayer = this.players.get(playerId);
+    
+    if (mainPlayer) {
+      parts.push(mainPlayer);
+      
+      if (mainPlayer.splitParts) {
+        mainPlayer.splitParts.forEach(partId => {
+          const part = this.players.get(partId);
+          if (part) {
+            parts.push(part);
+          }
+        });
+      }
+      
+      for (const [id, player] of this.players) {
+        if (player.parentId === playerId) {
+          parts.push(player);
+        }
+      }
+    }
+    
+    return parts;
   }
 
   private distance(x1: number, y1: number, x2: number, y2: number): number {
@@ -130,7 +177,8 @@ export class GameServer {
           aggression: 0.5,
           lastMoveTime: Date.now(),
           splitParts: [],
-          score: 0, // SKÓRE ZAČÍNA NA 0
+          score: 0,
+          isControlled: true,
         };
         this.players.set(socket.id, player);
 
@@ -147,7 +195,7 @@ export class GameServer {
         const player = this.players.get(socket.id);
         if (!player || player.isBot) return;
 
-        this.movePlayerTowardsTarget(player, data.x, data.y);
+        this.moveAllPlayerParts(socket.id, data.x, data.y);
       });
 
       socket.on('split', () => {
@@ -157,7 +205,6 @@ export class GameServer {
       socket.on('disconnect', () => {
         const player = this.players.get(socket.id);
         if (player && !player.isBot) {
-          // Odstrániť všetky časti hráča
           if (player.splitParts) {
             player.splitParts.forEach(partId => {
               this.players.delete(partId);
@@ -174,15 +221,12 @@ export class GameServer {
     const player = this.players.get(playerId);
     if (!player || player.mass < this.MIN_SPLIT_MASS) return;
 
-    // Rozdeliť hmotnosť na polovicu
     const newMass = player.mass / 2;
     const newRadius = this.massToRadius(newMass);
 
-    // Aktualizovať pôvodného hráča
     player.mass = newMass;
     player.radius = newRadius;
 
-    // Vytvoriť novú časť
     const newPartId = `${playerId}_part_${Date.now()}`;
     const angle = Math.random() * Math.PI * 2;
     const splitDistance = player.radius * 2;
@@ -201,10 +245,10 @@ export class GameServer {
       lastMoveTime: Date.now(),
       parentId: playerId,
       splitParts: [],
-      score: 0, // Nové časti majú score 0
+      score: 0,
+      isControlled: true,
     };
 
-    // Pridať do zoznamu častí
     if (!player.splitParts) {
       player.splitParts = [];
     }
@@ -221,22 +265,42 @@ export class GameServer {
     for (let i = 0; i < playersArray.length; i++) {
       const [playerId, player] = playersArray[i];
       
-      // Skontrolovať zlúčenie s rodičom
       if (player.parentId) {
         const parent = this.players.get(player.parentId);
         if (parent && this.distance(player.x, player.y, parent.x, parent.y) < parent.radius * 2) {
-          // Zlúčiť späť - PRIDAŤ SCORE
           parent.mass += player.mass;
           parent.radius = this.massToRadius(parent.mass);
-          parent.score += player.score; // PRIPOČÍTAŤ SCORE ČASTI
+          parent.score += player.score;
           
-          // Odstrániť časť zo zoznamu
           if (parent.splitParts) {
             parent.splitParts = parent.splitParts.filter(id => id !== playerId);
           }
           
           this.players.delete(playerId);
           console.log(`Part ${playerId} merged back with parent ${player.parentId}`);
+        }
+      }
+
+      if (player.parentId) {
+        const parent = this.players.get(player.parentId);
+        if (parent && parent.splitParts) {
+          for (const otherPartId of parent.splitParts) {
+            if (otherPartId !== playerId) {
+              const otherPart = this.players.get(otherPartId);
+              if (otherPart && this.distance(player.x, player.y, otherPart.x, otherPart.y) < player.radius + otherPart.radius) {
+                player.mass += otherPart.mass;
+                player.radius = this.massToRadius(player.mass);
+                player.score += otherPart.score;
+                
+                if (parent.splitParts) {
+                  parent.splitParts = parent.splitParts.filter(id => id !== otherPartId);
+                }
+                
+                this.players.delete(otherPartId);
+                console.log(`Parts ${playerId} and ${otherPartId} merged`);
+              }
+            }
+          }
         }
       }
     }
@@ -248,7 +312,6 @@ export class GameServer {
     for (let i = 0; i < playersArray.length; i++) {
       const [playerId, player] = playersArray[i];
       
-      // Player-food kolízie
       for (const [foodId, foodItem] of this.food) {
         const dx = player.x - foodItem.x;
         const dy = player.y - foodItem.y;
@@ -259,16 +322,14 @@ export class GameServer {
           const massGain = foodItem.radius * 2;
           player.mass += massGain;
           player.radius = this.massToRadius(player.mass);
-          player.score += Math.round(massGain); // PRIDAŤ SCORE
+          player.score += Math.round(massGain);
           this.spawnFood();
         }
       }
 
-      // Player-player kolízie
       for (let j = i + 1; j < playersArray.length; j++) {
         const [otherPlayerId, otherPlayer] = playersArray[j];
         
-        // Preskočiť kolízie medzi časťami toho istého hráča
         const samePlayer = (player.parentId && otherPlayer.parentId && player.parentId === otherPlayer.parentId) ||
                           (player.parentId === otherPlayerId) || 
                           (otherPlayer.parentId === playerId) ||
@@ -290,45 +351,43 @@ export class GameServer {
             const massGain = otherPlayer.mass * 0.8;
             player.mass += massGain;
             player.radius = this.massToRadius(player.mass);
-            player.score += Math.round(massGain); // PRIDAŤ SCORE
+            player.score += Math.round(massGain);
             
             if (!otherPlayer.isBot) {
               this.io.to(otherPlayerId).emit('playerDeath', {
                 playerId: otherPlayerId,
                 eatenBy: player.name,
                 finalMass: otherPlayer.mass,
-                finalScore: otherPlayer.score // POSLAŤ FINÁLNE SCORE
+                finalScore: otherPlayer.score
               });
             }
 
-            // Respawn
             otherPlayer.x = Math.random() * this.WORLD_WIDTH;
             otherPlayer.y = Math.random() * this.WORLD_HEIGHT;
             otherPlayer.mass = this.BASE_MASS;
             otherPlayer.radius = this.BASE_RADIUS;
-            otherPlayer.score = 0; // RESET SCORE
+            otherPlayer.score = 0;
 
           } else if (canOtherEatPlayer) {
             const massGain = player.mass * 0.8;
             otherPlayer.mass += massGain;
             otherPlayer.radius = this.massToRadius(otherPlayer.mass);
-            otherPlayer.score += Math.round(massGain); // PRIDAŤ SCORE
+            otherPlayer.score += Math.round(massGain);
             
             if (!player.isBot) {
               this.io.to(playerId).emit('playerDeath', {
                 playerId: playerId,
                 eatenBy: otherPlayer.name,
                 finalMass: player.mass,
-                finalScore: player.score // POSLAŤ FINÁLNE SCORE
+                finalScore: player.score
               });
             }
 
-            // Respawn
             player.x = Math.random() * this.WORLD_WIDTH;
             player.y = Math.random() * this.WORLD_HEIGHT;
             player.mass = this.BASE_MASS;
             player.radius = this.BASE_RADIUS;
-            player.score = 0; // RESET SCORE
+            player.score = 0;
           }
         }
       }
@@ -359,7 +418,8 @@ export class GameServer {
           name: p.name,
           isBot: p.isBot,
           parentId: p.parentId,
-          score: p.score, // POSLAŤ SCORE
+          score: p.score,
+          isControlled: p.isControlled,
         })),
         food: Array.from(this.food.values()).map(f => ({
           id: f.id,
