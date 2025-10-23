@@ -19,6 +19,8 @@ interface Player {
   parentId?: string;
   score: number;
   isControlled: boolean;
+  lastUpdate: number;
+  quadrant?: string;
 }
 
 interface Food {
@@ -27,6 +29,16 @@ interface Food {
   y: number;
   radius: number;
   color: string;
+  quadrant: string;
+}
+
+interface Quadrant {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  players: Set<string>;
+  food: Set<string>;
 }
 
 export class GameServer {
@@ -44,12 +56,84 @@ export class GameServer {
 
   private readonly PLAYER_SPEED = 15;
   private readonly MIN_SPLIT_MASS = 50;
+  
+  // Optimalizácia: Spatial partitioning
+  private readonly QUADRANT_SIZE = 500;
+  private quadrants: Map<string, Quadrant> = new Map();
+  private readonly MAX_PLAYERS = 1000;
+  private readonly UPDATE_RATE = 60; // FPS
+  private readonly BROADCAST_RATE = 20; // FPS pre klientov
 
   constructor(io: Server) {
     this.io = io;
+    this.initializeQuadrants();
     this.initializeFood();
     this.setupSocketHandlers();
     this.startGameLoop();
+  }
+
+  private initializeQuadrants(): void {
+    const cols = Math.ceil(this.WORLD_WIDTH / this.QUADRANT_SIZE);
+    const rows = Math.ceil(this.WORLD_HEIGHT / this.QUADRANT_SIZE);
+    
+    for (let x = 0; x < cols; x++) {
+      for (let y = 0; y < rows; y++) {
+        const quadrantId = `${x}_${y}`;
+        this.quadrants.set(quadrantId, {
+          x: x * this.QUADRANT_SIZE,
+          y: y * this.QUADRANT_SIZE,
+          width: this.QUADRANT_SIZE,
+          height: this.QUADRANT_SIZE,
+          players: new Set(),
+          food: new Set()
+        });
+      }
+    }
+  }
+
+  private getQuadrantId(x: number, y: number): string {
+    const col = Math.floor(x / this.QUADRANT_SIZE);
+    const row = Math.floor(y / this.QUADRANT_SIZE);
+    return `${col}_${row}`;
+  }
+
+  private updatePlayerQuadrant(playerId: string, oldX?: number, oldY?: number): void {
+    const player = this.players.get(playerId);
+    if (!player) return;
+
+    const newQuadrantId = this.getQuadrantId(player.x, player.y);
+    
+    // Odstrániť zo starého kvadrantu
+    if (oldX !== undefined && oldY !== undefined) {
+      const oldQuadrantId = this.getQuadrantId(oldX, oldY);
+      if (oldQuadrantId !== newQuadrantId) {
+        const oldQuadrant = this.quadrants.get(oldQuadrantId);
+        if (oldQuadrant) {
+          oldQuadrant.players.delete(playerId);
+        }
+      }
+    }
+
+    // Pridať do nového kvadrantu
+    const newQuadrant = this.quadrants.get(newQuadrantId);
+    if (newQuadrant) {
+      newQuadrant.players.add(playerId);
+    }
+    
+    player.quadrant = newQuadrantId;
+  }
+
+  private updateFoodQuadrant(foodId: string): void {
+    const food = this.food.get(foodId);
+    if (!food) return;
+
+    const quadrantId = this.getQuadrantId(food.x, food.y);
+    food.quadrant = quadrantId;
+    
+    const quadrant = this.quadrants.get(quadrantId);
+    if (quadrant) {
+      quadrant.food.add(foodId);
+    }
   }
 
   private initializeFood(): void {
@@ -65,11 +149,17 @@ export class GameServer {
       y: Math.random() * this.WORLD_HEIGHT,
       radius: this.MIN_FOOD_RADIUS + Math.random() * (this.MAX_FOOD_RADIUS - this.MIN_FOOD_RADIUS),
       color: this.getRandomColor(),
+      quadrant: ''
     };
+    
     this.food.set(food.id, food);
+    this.updateFoodQuadrant(food.id);
   }
 
   private movePlayerTowardsTarget(player: Player, targetX: number, targetY: number): void {
+    const oldX = player.x;
+    const oldY = player.y;
+    
     const dx = targetX - player.x;
     const dy = targetY - player.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
@@ -87,6 +177,11 @@ export class GameServer {
       player.y = Math.max(player.radius, Math.min(this.WORLD_HEIGHT - player.radius, player.y));
       
       player.lastMoveTime = Date.now();
+      
+      // Aktualizovať kvadrant ak sa pohla
+      if (Math.abs(oldX - player.x) > 1 || Math.abs(oldY - player.y) > 1) {
+        this.updatePlayerQuadrant(player.id, oldX, oldY);
+      }
     }
   }
 
@@ -127,6 +222,7 @@ export class GameServer {
         });
       }
       
+      // Optimalizácia: Použiť Map pre rýchlejší lookup
       for (const [id, player] of this.players) {
         if (player.parentId === playerId) {
           parts.push(player);
@@ -159,6 +255,13 @@ export class GameServer {
     this.io.on('connection', (socket: Socket) => {
       console.log(`Player connected: ${socket.id}`);
 
+      // Kontrola maximálneho počtu hráčov
+      if (this.players.size >= this.MAX_PLAYERS) {
+        socket.emit('serverFull');
+        socket.disconnect();
+        return;
+      }
+
       socket.on('join', (name: string) => {
         if (this.players.has(socket.id)) {
           this.players.delete(socket.id);
@@ -171,7 +274,7 @@ export class GameServer {
           radius: this.BASE_RADIUS,
           mass: this.BASE_MASS,
           color: this.getRandomColor(),
-          name: name || 'Anonymous',
+          name: (name || 'Anonymous').substring(0, 15),
           isBot: false,
           behavior: 'neutral',
           aggression: 0.5,
@@ -179,8 +282,11 @@ export class GameServer {
           splitParts: [],
           score: 0,
           isControlled: true,
+          lastUpdate: Date.now()
         };
+        
         this.players.set(socket.id, player);
+        this.updatePlayerQuadrant(socket.id);
 
         socket.emit('init', {
           player,
@@ -188,7 +294,7 @@ export class GameServer {
           worldHeight: this.WORLD_HEIGHT,
         });
 
-        console.log(`Player ${name} joined with mass: ${this.BASE_MASS} and score: 0. Total players: ${this.players.size}`);
+        console.log(`Player ${player.name} joined. Total players: ${this.players.size}`);
       });
 
       socket.on('move', (data: { x: number; y: number }) => {
@@ -211,6 +317,15 @@ export class GameServer {
             });
           }
           this.players.delete(socket.id);
+          
+          // Odstrániť z kvadrantu
+          if (player.quadrant) {
+            const quadrant = this.quadrants.get(player.quadrant);
+            if (quadrant) {
+              quadrant.players.delete(socket.id);
+            }
+          }
+          
           console.log(`Player disconnected: ${socket.id}. Total players: ${this.players.size}`);
         }
       });
@@ -247,6 +362,7 @@ export class GameServer {
       splitParts: [],
       score: 0,
       isControlled: true,
+      lastUpdate: Date.now()
     };
 
     if (!player.splitParts) {
@@ -255,6 +371,7 @@ export class GameServer {
     player.splitParts.push(newPartId);
 
     this.players.set(newPartId, newPart);
+    this.updatePlayerQuadrant(newPartId);
 
     console.log(`Player ${playerId} split into two parts. New mass: ${newMass}`);
   }
@@ -277,28 +394,12 @@ export class GameServer {
           }
           
           this.players.delete(playerId);
-          console.log(`Part ${playerId} merged back with parent ${player.parentId}`);
-        }
-      }
-
-      if (player.parentId) {
-        const parent = this.players.get(player.parentId);
-        if (parent && parent.splitParts) {
-          for (const otherPartId of parent.splitParts) {
-            if (otherPartId !== playerId) {
-              const otherPart = this.players.get(otherPartId);
-              if (otherPart && this.distance(player.x, player.y, otherPart.x, otherPart.y) < player.radius + otherPart.radius) {
-                player.mass += otherPart.mass;
-                player.radius = this.massToRadius(player.mass);
-                player.score += otherPart.score;
-                
-                if (parent.splitParts) {
-                  parent.splitParts = parent.splitParts.filter(id => id !== otherPartId);
-                }
-                
-                this.players.delete(otherPartId);
-                console.log(`Parts ${playerId} and ${otherPartId} merged`);
-              }
+          
+          // Odstrániť z kvadrantu
+          if (player.quadrant) {
+            const quadrant = this.quadrants.get(player.quadrant);
+            if (quadrant) {
+              quadrant.players.delete(playerId);
             }
           }
         }
@@ -307,135 +408,156 @@ export class GameServer {
   }
 
   private checkCollisions(): void {
-    const playersArray = Array.from(this.players.entries());
+    // Optimalizácia: Kontrolovať kolízie iba v susedných kvadrantoch
+    const processedPairs = new Set<string>();
     
-    for (let i = 0; i < playersArray.length; i++) {
-      const [playerId, player] = playersArray[i];
+    for (const [quadrantId, quadrant] of this.quadrants) {
+      const playerIds = Array.from(quadrant.players);
       
-      for (const [foodId, foodItem] of this.food) {
-        const dx = player.x - foodItem.x;
-        const dy = player.y - foodItem.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
+      // Kolízie hráčov s jedlom v ich kvadrante
+      for (const playerId of playerIds) {
+        const player = this.players.get(playerId);
+        if (!player) continue;
 
-        if (distance < player.radius) {
-          this.food.delete(foodId);
-          const massGain = foodItem.radius * 2;
-          player.mass += massGain;
-          player.radius = this.massToRadius(player.mass);
-          player.score += Math.round(massGain);
-          this.spawnFood();
-        }
-      }
+        for (const foodId of quadrant.food) {
+          const foodItem = this.food.get(foodId);
+          if (!foodItem) continue;
 
-      for (let j = i + 1; j < playersArray.length; j++) {
-        const [otherPlayerId, otherPlayer] = playersArray[j];
-        
-        const samePlayer = (player.parentId && otherPlayer.parentId && player.parentId === otherPlayer.parentId) ||
-                          (player.parentId === otherPlayerId) || 
-                          (otherPlayer.parentId === playerId) ||
-                          (playerId === otherPlayer.parentId);
-        
-        if (samePlayer) {
-          continue;
-        }
-        
-        const dx = player.x - otherPlayer.x;
-        const dy = player.y - otherPlayer.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        
-        if (distance < player.radius + otherPlayer.radius) {
-          const canPlayerEatOther = player.mass > otherPlayer.mass * 1.15;
-          const canOtherEatPlayer = otherPlayer.mass > player.mass * 1.15;
+          const dx = player.x - foodItem.x;
+          const dy = player.y - foodItem.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
 
-          if (canPlayerEatOther) {
-            const massGain = otherPlayer.mass * 0.8;
+          if (distance < player.radius) {
+            this.food.delete(foodId);
+            quadrant.food.delete(foodId);
+            
+            const massGain = foodItem.radius * 2;
             player.mass += massGain;
             player.radius = this.massToRadius(player.mass);
             player.score += Math.round(massGain);
-            
-            if (!otherPlayer.isBot) {
-              this.io.to(otherPlayerId).emit('playerDeath', {
-                playerId: otherPlayerId,
-                eatenBy: player.name,
-                finalMass: otherPlayer.mass,
-                finalScore: otherPlayer.score
-              });
-            }
-
-            otherPlayer.x = Math.random() * this.WORLD_WIDTH;
-            otherPlayer.y = Math.random() * this.WORLD_HEIGHT;
-            otherPlayer.mass = this.BASE_MASS;
-            otherPlayer.radius = this.BASE_RADIUS;
-            otherPlayer.score = 0;
-
-          } else if (canOtherEatPlayer) {
-            const massGain = player.mass * 0.8;
-            otherPlayer.mass += massGain;
-            otherPlayer.radius = this.massToRadius(otherPlayer.mass);
-            otherPlayer.score += Math.round(massGain);
-            
-            if (!player.isBot) {
-              this.io.to(playerId).emit('playerDeath', {
-                playerId: playerId,
-                eatenBy: otherPlayer.name,
-                finalMass: player.mass,
-                finalScore: player.score
-              });
-            }
-
-            player.x = Math.random() * this.WORLD_WIDTH;
-            player.y = Math.random() * this.WORLD_HEIGHT;
-            player.mass = this.BASE_MASS;
-            player.radius = this.BASE_RADIUS;
-            player.score = 0;
+            this.spawnFood();
           }
+        }
+
+        // Kolízie medzi hráčmi v rovnakom kvadrante
+        for (const otherPlayerId of playerIds) {
+          if (playerId === otherPlayerId) continue;
+          
+          const pairKey = [playerId, otherPlayerId].sort().join('_');
+          if (processedPairs.has(pairKey)) continue;
+          
+          processedPairs.add(pairKey);
+          
+          const otherPlayer = this.players.get(otherPlayerId);
+          if (!otherPlayer) continue;
+
+          this.checkPlayerCollision(player, otherPlayer);
         }
       }
     }
   }
 
+  private checkPlayerCollision(player: Player, otherPlayer: Player): void {
+    const samePlayer = (player.parentId && otherPlayer.parentId && player.parentId === otherPlayer.parentId) ||
+                      (player.parentId === otherPlayer.id) || 
+                      (otherPlayer.parentId === player.id) ||
+                      (player.id === otherPlayer.parentId);
+    
+    if (samePlayer) {
+      return;
+    }
+    
+    const dx = player.x - otherPlayer.x;
+    const dy = player.y - otherPlayer.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    if (distance < player.radius + otherPlayer.radius) {
+      const canPlayerEatOther = player.mass > otherPlayer.mass * 1.15;
+      const canOtherEatPlayer = otherPlayer.mass > player.mass * 1.15;
+
+      if (canPlayerEatOther) {
+        this.handlePlayerEaten(otherPlayer, player);
+      } else if (canOtherEatPlayer) {
+        this.handlePlayerEaten(player, otherPlayer);
+      }
+    }
+  }
+
+  private handlePlayerEaten(eaten: Player, eater: Player): void {
+    const massGain = eaten.mass * 0.8;
+    eater.mass += massGain;
+    eater.radius = this.massToRadius(eater.mass);
+    eater.score += Math.round(massGain);
+    
+    if (!eaten.isBot) {
+      this.io.to(eaten.id).emit('playerDeath', {
+        playerId: eaten.id,
+        eatenBy: eater.name,
+        finalMass: eaten.mass,
+        finalScore: eaten.score
+      });
+    }
+
+    // Reset eaten player
+    eaten.x = Math.random() * this.WORLD_WIDTH;
+    eaten.y = Math.random() * this.WORLD_HEIGHT;
+    eaten.mass = this.BASE_MASS;
+    eaten.radius = this.BASE_RADIUS;
+    eaten.score = 0;
+    
+    this.updatePlayerQuadrant(eaten.id);
+  }
+
   private startGameLoop(): void {
-    const targetFPS = 60;
-    const targetFrameTime = 1000 / targetFPS;
-    let lastTime = Date.now();
+    const targetFrameTime = 1000 / this.UPDATE_RATE;
+    const targetBroadcastTime = 1000 / this.BROADCAST_RATE;
+    let lastUpdateTime = Date.now();
+    let lastBroadcastTime = Date.now();
 
     const gameLoop = () => {
       const currentTime = Date.now();
-      const deltaTime = currentTime - lastTime;
-      lastTime = currentTime;
-
-      this.checkCollisions();
-      this.checkMerge();
-
-      const gameState = {
-        players: Array.from(this.players.values()).map(p => ({
-          id: p.id,
-          x: Math.round(p.x),
-          y: Math.round(p.y),
-          radius: Math.round(p.radius),
-          mass: Math.round(p.mass),
-          color: p.color,
-          name: p.name,
-          isBot: p.isBot,
-          parentId: p.parentId,
-          score: p.score,
-          isControlled: p.isControlled,
-        })),
-        food: Array.from(this.food.values()).map(f => ({
-          id: f.id,
-          x: Math.round(f.x),
-          y: Math.round(f.y),
-          radius: f.radius,
-          color: f.color,
-        })),
-      };
-
-      this.io.volatile.emit('gameUpdate', gameState);
-
-      const processingTime = Date.now() - currentTime;
-      const waitTime = Math.max(0, targetFrameTime - processingTime);
+      const deltaTime = currentTime - lastUpdateTime;
       
-      setTimeout(gameLoop, waitTime);
+      // Update game logic
+      if (deltaTime >= targetFrameTime) {
+        lastUpdateTime = currentTime;
+        
+        this.checkCollisions();
+        this.checkMerge();
+      }
+
+      // Broadcast game state (menej často)
+      if (currentTime - lastBroadcastTime >= targetBroadcastTime) {
+        lastBroadcastTime = currentTime;
+        
+        const gameState = {
+          players: Array.from(this.players.values()).map(p => ({
+            id: p.id,
+            x: Math.round(p.x),
+            y: Math.round(p.y),
+            radius: Math.round(p.radius),
+            mass: Math.round(p.mass),
+            color: p.color,
+            name: p.name,
+            isBot: p.isBot,
+            parentId: p.parentId,
+            score: p.score,
+            isControlled: p.isControlled,
+          })),
+          food: Array.from(this.food.values()).map(f => ({
+            id: f.id,
+            x: Math.round(f.x),
+            y: Math.round(f.y),
+            radius: f.radius,
+            color: f.color,
+          })),
+        };
+
+        // Použiť volatile pre menej dôležité updaty
+        this.io.volatile.emit('gameUpdate', gameState);
+      }
+
+      setImmediate(gameLoop);
     };
 
     gameLoop();
