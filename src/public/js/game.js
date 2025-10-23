@@ -31,6 +31,7 @@ function gameApp() {
         upgrade: false,
       });
       this.setupSocketListeners();
+      this.setupKeyboardListeners();
     },
 
     setupSocketListeners() {
@@ -53,9 +54,15 @@ function gameApp() {
         this.playerCount = this.players.length;
 
         if (this.playerInitialized && this.currentPlayer) {
-          const current = this.players.find(p => p.id === this.currentPlayer.id);
-          if (current) {
-            this.currentPlayer = current;
+          // Nájsť všetky časti aktuálneho hráča
+          const currentPlayerParts = this.players.filter(p => 
+            p.id === this.currentPlayer.id || p.parentId === this.currentPlayer.id
+          );
+          
+          // Aktualizovať hlavného hráča
+          const mainPlayer = currentPlayerParts.find(p => p.id === this.currentPlayer.id);
+          if (mainPlayer) {
+            this.currentPlayer = mainPlayer;
           }
         }
 
@@ -77,6 +84,24 @@ function gameApp() {
       this.socket.on('disconnect', () => {
         console.log('Disconnected from server');
       });
+    },
+
+    setupKeyboardListeners() {
+      document.addEventListener('keydown', (e) => {
+        if (!this.gameStarted || this.gameOver) return;
+
+        // Kláves X pre rozdelenie
+        if (e.key === 'x' || e.key === 'X') {
+          this.splitPlayer();
+        }
+      });
+    },
+
+    splitPlayer() {
+      if (this.currentPlayer && this.currentPlayer.mass >= 50) { // Minimálna hmotnosť pre rozdelenie
+        this.socket.emit('split');
+        console.log('Splitting player...');
+      }
     },
 
     handlePlayerDeath(data = {}) {
@@ -119,18 +144,18 @@ function gameApp() {
         }
       });
 
-      // VEĽMI RÝCHLA INTERPOLÁCIA PRE PLYNULÝ POHYB
+      // Rýchla interpolácia
       for (const [id, interp] of this.interpolatedPlayers) {
         const player = this.players.find(p => p.id === id);
         if (player) {
-          const interpFactor = 0.5; // ZVÝŠENÉ NA 0.5 PRE OKAMŽITÚ ODOZVU
-          interp.x = player.x; // PRIAMY UPDATE BEZ INTERPOLÁCIE
+          const interpFactor = 0.5;
+          interp.x = player.x;
           interp.y = player.y;
           interp.radius = player.radius;
         }
       }
 
-      // Cleanup starých interpolácií
+      // Cleanup
       for (const [id, interp] of this.interpolatedPlayers) {
         if (now - interp.lastUpdate > 3000) {
           this.interpolatedPlayers.delete(id);
@@ -235,20 +260,29 @@ function gameApp() {
       const targetX = this.camera.x + this.mouse.x;
       const targetY = this.camera.y + this.mouse.y;
 
-      // ČASTEJŠIE POSIELANIE POHYBU PRE LEPŠIU ODOZVU
+      // Posielanie pohybu
       const now = Date.now();
       if (now - this.lastMoveSend > 30) {
         this.socket.emit('move', { x: targetX, y: targetY });
         this.lastMoveSend = now;
       }
 
-      // VEĽMI RÝCHLA KAMERA PRE OKAMŽITÚ ODOZVU
-      const lerpFactor = 0.3;
-      const targetCameraX = this.currentPlayer.x - this.canvas.width / 2;
-      const targetCameraY = this.currentPlayer.y - this.canvas.height / 2;
+      // Kamera - stred všetkých častí hráča
+      const playerParts = this.players.filter(p => 
+        p.id === this.currentPlayer.id || p.parentId === this.currentPlayer.id
+      );
       
-      this.camera.x += (targetCameraX - this.camera.x) * lerpFactor;
-      this.camera.y += (targetCameraY - this.camera.y) * lerpFactor;
+      if (playerParts.length > 0) {
+        const avgX = playerParts.reduce((sum, p) => sum + p.x, 0) / playerParts.length;
+        const avgY = playerParts.reduce((sum, p) => sum + p.y, 0) / playerParts.length;
+        
+        const lerpFactor = 0.3;
+        const targetCameraX = avgX - this.canvas.width / 2;
+        const targetCameraY = avgY - this.canvas.height / 2;
+        
+        this.camera.x += (targetCameraX - this.camera.x) * lerpFactor;
+        this.camera.y += (targetCameraY - this.camera.y) * lerpFactor;
+      }
     },
 
     render() {
@@ -277,6 +311,19 @@ function gameApp() {
       this.drawPlayers(viewBounds);
 
       this.ctx.restore();
+
+      // Zobrazenie ovládania
+      this.drawControls();
+    },
+
+    drawControls() {
+      this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      this.ctx.fillRect(10, this.canvas.height - 60, 300, 50);
+      
+      this.ctx.fillStyle = '#fff';
+      this.ctx.font = '14px Arial';
+      this.ctx.textAlign = 'left';
+      this.ctx.fillText('Controls: Move with mouse | Press X to split', 20, this.canvas.height - 35);
     },
 
     drawGrid() {
@@ -336,17 +383,19 @@ function gameApp() {
         this.ctx.lineWidth = 3;
         this.ctx.stroke();
 
-        if (p.id === this.currentPlayer.id) {
+        // Zvýraznenie aktuálneho hráča a jeho častí
+        const isCurrentPlayer = p.id === this.currentPlayer.id || p.parentId === this.currentPlayer.id;
+        if (isCurrentPlayer) {
           this.ctx.strokeStyle = '#fff';
           this.ctx.lineWidth = 5;
           this.ctx.stroke();
         }
 
-        if (radius > 15) {
+        if (radius > 10) {
           this.ctx.fillStyle = '#fff';
           this.ctx.strokeStyle = '#000';
           this.ctx.lineWidth = 3;
-          const fontSize = Math.max(12, radius / 3);
+          const fontSize = Math.max(10, radius / 3);
           this.ctx.font = `bold ${fontSize}px Arial`;
           this.ctx.textAlign = 'center';
           this.ctx.textBaseline = 'middle';
@@ -354,17 +403,34 @@ function gameApp() {
           this.ctx.strokeText(p.name, x, y);
           this.ctx.fillText(p.name, x, y);
 
-          if (p.isBot) {
+          // Zobrazenie hmotnosti pre časti
+          if (p.parentId) {
             this.ctx.font = `${fontSize * 0.6}px Arial`;
-            this.ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-            this.ctx.fillText('BOT', x, y + fontSize + 5);
+            this.ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            this.ctx.fillText(`Mass: ${Math.round(p.mass)}`, x, y + fontSize + 5);
           }
         }
       }
     },
 
     updateLeaderboard() {
-      this.leaderboard = [...this.players]
+      // Zoskupiť všetky časti pod hlavných hráčov
+      const mainPlayers = new Map();
+      
+      this.players.forEach(player => {
+        const mainId = player.parentId || player.id;
+        if (!mainPlayers.has(mainId)) {
+          mainPlayers.set(mainId, {
+            id: mainId,
+            name: player.name,
+            mass: 0,
+            isBot: player.isBot
+          });
+        }
+        mainPlayers.get(mainId).mass += player.mass;
+      });
+
+      this.leaderboard = Array.from(mainPlayers.values())
         .sort((a, b) => b.mass - a.mass)
         .slice(0, 10);
     }
