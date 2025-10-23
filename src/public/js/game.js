@@ -1,3 +1,15 @@
+/**
+ * Agar.io Clone - Main Game Application
+ * 
+ * This Alpine.js component manages the entire game lifecycle including:
+ * - Game state management
+ * - Socket.IO communication
+ * - Canvas rendering and optimization
+ * - User input handling
+ * - Performance monitoring
+ * 
+ * @returns {Object} Alpine.js component object
+ */
 function gameApp() {
 	return {
 		// Game state
@@ -20,7 +32,7 @@ function gameApp() {
 		viruses: {},
 		camera: { x: 0, y: 0 },
 
-		// Optimalizácie
+		// Optimization variables
 		lastFrameTime: 0,
 		frameCount: 0,
 		fps: 0,
@@ -33,6 +45,10 @@ function gameApp() {
 		renderDistance: 2000,
 		debugMode: false,
 
+		/**
+		 * Initializes the game application
+		 * Sets up canvas, context, and event listeners
+		 */
 		init() {
 			this.canvas = document.getElementById("gameCanvas");
 			this.ctx = this.canvas.getContext("2d");
@@ -45,11 +61,19 @@ function gameApp() {
 			}
 		},
 
+		/**
+		 * Resizes the canvas to match the window dimensions
+		 * Called on initialization and window resize
+		 */
 		resizeCanvas() {
 			this.canvas.width = window.innerWidth;
 			this.canvas.height = window.innerHeight;
 		},
 
+		/**
+		 * Sets up the debug information panel
+		 * Shows FPS, object counts, and performance metrics
+		 */
 		setupDebugPanel() {
 			const debugDiv = document.createElement("div");
 			debugDiv.style.cssText = `
@@ -72,6 +96,10 @@ function gameApp() {
 			document.body.appendChild(debugDiv);
 		},
 
+		/**
+		 * Starts the game by connecting to the server and initializing game loop
+		 * Generates a random player name if none is provided
+		 */
 		startGame() {
 			if (!this.playerName.trim()) {
 				this.playerName = "Player" + Math.floor(Math.random() * 1000);
@@ -93,11 +121,23 @@ function gameApp() {
 			this.gameLoop();
 		},
 
+		/**
+		 * Sets up all Socket.IO event listeners
+		 * Handles game state updates, leaderboard, and player events
+		 */
 		setupSocketEvents() {
 			// Throttle mouse events
 			let lastMouseEmit = 0;
 			const mouseThrottle = 16; // ~60fps
 
+			/**
+			 * Handles game state updates from the server
+			 * @event gameState
+			 * @param {Object} data - Complete game state data
+			 * @param {Object} data.players - All players in the game
+			 * @param {Object} data.foods - All food items in the game
+			 * @param {Object} data.viruses - All viruses in the game
+			 */
 			this.socket.on("gameState", (data) => {
 				// Batch update objects
 				this.batchUpdateObjects(data);
@@ -115,14 +155,32 @@ function gameApp() {
 				}
 			});
 
+			/**
+			 * Handles leaderboard updates from the server
+			 * @event leaderboardUpdate
+			 * @param {Array} leaderboard - Array of top players with scores
+			 */
 			this.socket.on("leaderboardUpdate", (leaderboard) => {
 				this.leaderboard = leaderboard.slice(0, 10); // Limit to top 10
 			});
 
+			/**
+			 * Handles player count updates
+			 * @event playerCountUpdate
+			 * @param {number} count - Current number of players in the game
+			 */
 			this.socket.on("playerCountUpdate", (count) => {
 				this.playerCount = count;
 			});
 
+			/**
+			 * Handles game over event when player is eliminated
+			 * @event gameOver
+			 * @param {Object} data - Game over statistics
+			 * @param {number} data.mass - Final mass of the player
+			 * @param {number} data.position - Final leaderboard position
+			 * @param {string} data.eatenBy - Name of player who ate this player
+			 */
 			this.socket.on("gameOver", (data) => {
 				this.finalMass = data.mass;
 				this.finalPosition = data.position;
@@ -142,6 +200,11 @@ function gameApp() {
 				this.visibleObjects.viruses.clear();
 			});
 
+			/**
+			 * Handles player disconnection events
+			 * @event playerDisconnected
+			 * @param {string} playerId - ID of the disconnected player
+			 */
 			this.socket.on("playerDisconnected", (playerId) => {
 				if (this.players[playerId]) {
 					delete this.players[playerId];
@@ -150,7 +213,10 @@ function gameApp() {
 				}
 			});
 
-			// Optimized mouse movement with throttling
+			/**
+			 * Optimized mouse movement handler with throttling
+			 * Sends mouse position to server for player movement
+			 */
 			this.canvas.addEventListener("mousemove", (e) => {
 				const now = performance.now();
 				if (
@@ -177,6 +243,10 @@ function gameApp() {
 			let lastSplitTime = 0;
 			const splitCooldown = 500;
 
+			/**
+			 * Keyboard input handler for player splitting
+			 * Uses space bar with cooldown to prevent spam
+			 */
 			document.addEventListener("keydown", (e) => {
 				if (e.code === "Space" && this.socket) {
 					e.preventDefault();
@@ -190,6 +260,11 @@ function gameApp() {
 			});
 		},
 
+		/**
+		 * Batch updates game objects from server data
+		 * Optimizes performance by updating all objects at once
+		 * @param {Object} data - Game state data from server
+		 */
 		batchUpdateObjects(data) {
 			// Batch update players
 			Object.keys(data.players).forEach((playerId) => {
@@ -215,6 +290,11 @@ function gameApp() {
 			}
 		},
 
+		/**
+		 * Main game loop responsible for rendering and updates
+		 * Uses requestAnimationFrame for smooth animation
+		 * @param {number} currentTime - Current timestamp from requestAnimationFrame
+		 */
 		gameLoop(currentTime = performance.now()) {
 			if (!this.gameStarted) return;
 
@@ -235,7 +315,7 @@ function gameApp() {
 			this.ctx.fillStyle = "#f0f0f0";
 			this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-			// Draw grid (menej často pri nízkom FPS)
+			// Draw grid (less frequently at low FPS)
 			if (this.fps > 30 || this.frameCount % 2 === 0) {
 				this.drawGrid();
 			}
@@ -256,6 +336,10 @@ function gameApp() {
 			requestAnimationFrame((time) => this.gameLoop(time));
 		},
 
+		/**
+		 * Calculates which objects are currently visible in the viewport
+		 * Uses spatial partitioning to optimize rendering
+		 */
 		calculateVisibleObjects() {
 			this.visibleObjects.players.clear();
 			this.visibleObjects.foods.clear();
@@ -293,6 +377,16 @@ function gameApp() {
 			});
 		},
 
+		/**
+		 * Checks if an object is within the visible viewport
+		 * @param {Object} obj - Game object to check (player, food, virus)
+		 * @param {Object} viewport - Viewport boundaries
+		 * @param {number} viewport.left - Left boundary
+		 * @param {number} viewport.right - Right boundary
+		 * @param {number} viewport.top - Top boundary
+		 * @param {number} viewport.bottom - Bottom boundary
+		 * @returns {boolean} True if object is visible
+		 */
 		isObjectVisible(obj, viewport) {
 			return (
 				obj.x + obj.radius >= viewport.left &&
@@ -302,6 +396,10 @@ function gameApp() {
 			);
 		},
 
+		/**
+		 * Draws the background grid for spatial reference
+		 * Grid spacing adapts based on camera zoom/position
+		 */
 		drawGrid() {
 			const gridSize = 100;
 
@@ -340,6 +438,10 @@ function gameApp() {
 			}
 		},
 
+		/**
+		 * Draws all visible food items
+		 * Uses cached food data for performance
+		 */
 		drawVisibleFoods() {
 			this.visibleObjects.foods.forEach((foodId) => {
 				const food = this.foods[foodId];
@@ -352,6 +454,10 @@ function gameApp() {
 			});
 		},
 
+		/**
+		 * Draws all visible virus cells
+		 * Includes spike details for larger viruses
+		 */
 		drawVisibleViruses() {
 			this.visibleObjects.viruses.forEach((virusId) => {
 				const virus = this.viruses[virusId];
@@ -362,7 +468,7 @@ function gameApp() {
 				this.ctx.arc(virus.x, virus.y, virus.radius, 0, Math.PI * 2);
 				this.ctx.fill();
 
-				// Draw virus spikes (len ak je virus dostatočne veľký)
+				// Draw virus spikes (only if virus is large enough)
 				if (virus.radius > 10) {
 					this.ctx.strokeStyle = virus.color;
 					this.ctx.lineWidth = 2;
@@ -384,12 +490,17 @@ function gameApp() {
 			});
 		},
 
+		/**
+		 * Draws all visible player cells
+		 * Handles both single-cell and multi-cell players
+		 * Renders player names on sufficiently large cells
+		 */
 		drawVisiblePlayers() {
 			this.visibleObjects.players.forEach((playerId) => {
 				const player = this.players[playerId];
 				if (!player) return;
 
-				// Draw player cell(s) - optimalizované pre multi-cell hráčov
+				// Draw player cell(s) - optimized for multi-cell players
 				if (player.cells && Array.isArray(player.cells)) {
 					player.cells.forEach((cell) => {
 						this.ctx.fillStyle = player.color;
@@ -397,7 +508,7 @@ function gameApp() {
 						this.ctx.arc(cell.x, cell.y, cell.radius, 0, Math.PI * 2);
 						this.ctx.fill();
 
-						// Draw player name (len ak je cell dostatočne veľká)
+						// Draw player name (only if cell is large enough)
 						if (cell.radius > 15) {
 							this.ctx.fillStyle = "#fff";
 							this.ctx.font = `${Math.max(12, Math.min(20, cell.radius / 3))}px Arial`;
@@ -424,6 +535,10 @@ function gameApp() {
 			});
 		},
 
+		/**
+		 * Updates debug panel with current performance metrics
+		 * Only called when debugMode is enabled
+		 */
 		updateDebugInfo() {
 			const fpsCounter = document.getElementById("fpsCounter");
 			const playerCounter = document.getElementById("playerCounter");
@@ -443,6 +558,10 @@ function gameApp() {
 			}
 		},
 
+		/**
+		 * Restarts the game after game over
+		 * Clears caches and reconnects to server
+		 */
 		restartGame() {
 			this.gameOver = false;
 
@@ -455,6 +574,10 @@ function gameApp() {
 			this.startGame();
 		},
 
+		/**
+		 * Returns to main menu and cleans up resources
+		 * Disconnects socket and clears all game state
+		 */
 		backToMenu() {
 			this.gameStarted = false;
 			this.gameOver = false;

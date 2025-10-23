@@ -1,15 +1,38 @@
+/**
+ * Agar.io Clone - CSS Stylesheet
+ * 
+ * This stylesheet contains all the styles for the Agar.io clone game,
+ * including menu screens, game interface, HUD, and responsive design.
+ */
+
+/* ===== RESET & BASE STYLES ===== */
+
+/**
+ * Global reset for consistent styling across browsers
+ * Removes default margins, padding, and sets box-sizing to border-box
+ */
 * {
 	margin: 0;
 	padding: 0;
 	box-sizing: border-box;
 }
 
+/**
+ * Base body styles
+ * Sets up the main font family and prevents scrolling
+ */
 body {
 	font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
 	overflow: hidden;
 	background: #111;
 }
 
+/* ===== MENU SCREEN STYLES ===== */
+
+/**
+ * Main menu screen container
+ * Covers entire viewport with gradient background
+ */
 .menu-screen {
 	position: fixed;
 	top: 0;
@@ -23,6 +46,10 @@ body {
 	z-index: 1000;
 }
 
+/**
+ * Menu content container
+ * White card with shadow and rounded corners
+ */
 .menu-container {
 	background: white;
 	padding: 3rem;
@@ -32,6 +59,9 @@ body {
 	min-width: 400px;
 }
 
+/**
+ * Main game title with gradient text effect
+ */
 .game-title {
 	font-size: 3.5rem;
 	font-weight: bold;
@@ -42,6 +72,12 @@ body {
 	margin-bottom: 2rem;
 }
 
+/* ===== GAME SCREEN STYLES ===== */
+
+/**
+ * Main game screen container
+ * Takes full viewport and handles overflow
+ */
 .game-screen {
 	position: relative;
 	width: 100vw;
@@ -49,12 +85,22 @@ body {
 	overflow: hidden;
 }
 
+/**
+ * Game canvas element
+ * Dark background with custom cursor
+ */
 #gameCanvas {
 	display: block;
 	background: #222;
 	cursor: none;
 }
 
+/* ===== HUD (HEADS-UP DISPLAY) STYLES ===== */
+
+/**
+ * HUD container
+ * Fixed positioning at top with transparent background and blur effect
+ */
 .hud {
 	position: fixed;
 	top: 0;
@@ -68,6 +114,10 @@ body {
 	align-items: flex-start;
 }
 
+/**
+ * Player statistics panel
+ * Dark semi-transparent background with blur effect
+ */
 .stats {
 	background: rgba(0, 0, 0, 0.7);
 	color: white;
@@ -76,15 +126,25 @@ body {
 	backdrop-filter: blur(10px);
 }
 
+/**
+ * Individual statistic item
+ */
 .stat-item {
 	font-size: 1.1rem;
 	margin-bottom: 5px;
 }
 
+/**
+ * Removes margin from last statistic item
+ */
 .stat-item:last-child {
 	margin-bottom: 0;
 }
 
+/**
+ * Leaderboard panel
+ * Similar to stats panel but with specific width
+ */
 .leaderboard {
 	background: rgba(0, 0, 0, 0.7);
 	color: white;
@@ -94,6 +154,9 @@ body {
 	min-width: 200px;
 }
 
+/**
+ * Leaderboard title
+ */
 .leaderboard h5 {
 	margin-bottom: 10px;
 	text-align: center;
@@ -102,6 +165,10 @@ body {
 	padding-bottom: 8px;
 }
 
+/**
+ * Individual leaderboard entry
+ * Flex layout for name and mass display
+ */
 .leaderboard-item {
 	display: flex;
 	justify-content: space-between;
@@ -110,15 +177,28 @@ body {
 	border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+/**
+ * Removes border from last leaderboard item
+ */
 .leaderboard-item:last-child {
 	border-bottom: none;
 }
 
+/* ===== FORM ELEMENT STYLES ===== */
+
+/**
+ * Focus state for form inputs
+ * Blue border with glow effect
+ */
 input.form-control:focus {
 	border-color: #667eea;
 	box-shadow: 0 0 0 0.25rem rgba(102, 126, 234, 0.25);
 }
 
+/**
+ * Primary button styles
+ * Gradient background with hover animation
+ */
 .btn-primary {
 	background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 	border: none;
@@ -127,12 +207,21 @@ input.form-control:focus {
 	transition: transform 0.2s;
 }
 
+/**
+ * Primary button hover state
+ * Scale effect and gradient reversal
+ */
 .btn-primary:hover {
 	transform: scale(1.05);
 	background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
 }
 
-/* Game Over Screen */
+/* ===== GAME OVER SCREEN STYLES ===== */
+
+/**
+ * Game over screen overlay
+ * Dark semi-transparent background covering entire viewport
+ */
 .game-over-screen {
 	position: fixed;
 	top: 0;
@@ -146,12 +235,20 @@ input.form-control:focus {
 	z-index: 1000;
 }
 
+/**
+ * Game over content container
+ * Responsive width with padding
+ */
 .game-over-container {
 	width: 100%;
 	max-width: 500px;
 	padding: 20px;
 }
 
+/**
+ * Game over card element
+ * Gradient background with border and entrance animation
+ */
 .game-over-card {
 	background: linear-gradient(135deg, #2c3e50, #34495e);
 	border-radius: 15px;
@@ -162,6 +259,10 @@ input.form-control:focus {
 	animation: gameOverAppear 0.6s ease-out;
 }
 
+/**
+ * Entrance animation for game over screen
+ * Scale and fade in effect from top
+ */
 @keyframes gameOverAppear {
 	0% {
 		opacity: 0;
@@ -174,6 +275,10 @@ input.form-control:focus {
 	}
 }
 
+/**
+ * Game over title
+ * Red color with shadow effect
+ */
 .game-over-title {
 	color: #e74c3c;
 	font-size: 3rem;
@@ -182,6 +287,10 @@ input.form-control:focus {
 	text-shadow: 0 2px 10px rgba(231, 76, 60, 0.5);
 }
 
+/**
+ * Game over statistics container
+ * Semi-transparent background
+ */
 .game-over-stats {
 	background: rgba(255, 255, 255, 0.1);
 	border-radius: 10px;
@@ -189,6 +298,10 @@ input.form-control:focus {
 	margin-bottom: 30px;
 }
 
+/**
+ * Individual statistic row
+ * Flex layout with bottom border
+ */
 .stat {
 	display: flex;
 	justify-content: space-between;
@@ -197,21 +310,36 @@ input.form-control:focus {
 	border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+/**
+ * Removes border from last statistic
+ */
 .stat:last-child {
 	border-bottom: none;
 }
 
+/**
+ * Statistic label styling
+ * Light gray color
+ */
 .stat-label {
 	color: #bdc3c7;
 	font-size: 1.1rem;
 }
 
+/**
+ * Statistic value styling
+ * White color with bold weight
+ */
 .stat-value {
 	color: #fff;
 	font-size: 1.2rem;
 	font-weight: bold;
 }
 
+/**
+ * Game over action buttons container
+ * Flex layout with gap
+ */
 .game-over-actions {
 	display: flex;
 	gap: 15px;
@@ -219,6 +347,10 @@ input.form-control:focus {
 	flex-wrap: wrap;
 }
 
+/**
+ * Game over button styles
+ * Fixed width with hover effects
+ */
 .game-over-actions .btn {
 	min-width: 140px;
 	padding: 12px 24px;
@@ -227,12 +359,21 @@ input.form-control:focus {
 	transition: all 0.3s ease;
 }
 
+/**
+ * Game over button hover state
+ * Lift effect with shadow
+ */
 .game-over-actions .btn:hover {
 	transform: translateY(-2px);
 	box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
 }
 
-/* Current player highlight in leaderboard */
+/* ===== PLAYER HIGHLIGHT STYLES ===== */
+
+/**
+ * Current player highlight in leaderboard
+ * Blue background with border
+ */
 .leaderboard-item.current-player {
 	background: rgba(52, 152, 219, 0.3);
 	border: 1px solid #3498db;
@@ -241,7 +382,12 @@ input.form-control:focus {
 	margin: 2px 0;
 }
 
-/* Death animation for canvas */
+/* ===== ANIMATIONS ===== */
+
+/**
+ * Death animation for canvas
+ * Pulsing red effect when player dies
+ */
 @keyframes deathPulse {
 	0% {
 		box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.7);
@@ -256,11 +402,20 @@ input.form-control:focus {
 	}
 }
 
+/**
+ * Death animation class
+ * Applies the death pulse animation
+ */
 .death-animation {
 	animation: deathPulse 1s ease-out;
 }
 
-/* Responsive design */
+/* ===== RESPONSIVE DESIGN ===== */
+
+/**
+ * Tablet and mobile styles
+ * Adjusts padding and font sizes for smaller screens
+ */
 @media (max-width: 768px) {
 	.game-over-card {
 		padding: 30px 20px;
@@ -280,18 +435,29 @@ input.form-control:focus {
 	}
 }
 
+/**
+ * Game over action buttons
+ * Fixed width with margin
+ */
 .game-over-actions .btn {
 	min-width: 160px;
 	margin: 0 10px;
 	transition: all 0.3s ease;
 }
 
+/**
+ * Game over button hover effects
+ * Lift and shadow animation
+ */
 .game-over-actions .btn:hover {
 	transform: translateY(-2px);
 	box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
 }
 
-/* Responsive pre mobile */
+/**
+ * Mobile-specific styles
+ * Stack buttons vertically on very small screens
+ */
 @media (max-width: 576px) {
 	.game-over-actions {
 		flex-direction: column;
@@ -304,6 +470,10 @@ input.form-control:focus {
 	}
 }
 
+/**
+ * Alternative menu screen styling
+ * Semi-transparent background for modern look
+ */
 .menu-screen {
 	position: fixed;
 	top: 0;
@@ -317,6 +487,10 @@ input.form-control:focus {
 	z-index: 1000;
 }
 
+/**
+ * Alternative menu container
+ * Semi-transparent white with shadow
+ */
 .menu-container {
 	background: rgba(255, 255, 255, 0.95);
 	padding: 3rem;
@@ -326,6 +500,10 @@ input.form-control:focus {
 	min-width: 400px;
 }
 
+/**
+ * Alternative game title
+ * Solid color with text shadow
+ */
 .game-title {
 	font-size: 3.5rem;
 	font-weight: bold;
@@ -334,7 +512,12 @@ input.form-control:focus {
 	text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-/* Game Screen */
+/* ===== ALTERNATIVE GAME SCREEN STYLES ===== */
+
+/**
+ * Alternative game screen
+ * Light background for contrast
+ */
 .game-screen {
 	position: relative;
 	width: 100vw;
@@ -342,7 +525,10 @@ input.form-control:focus {
 	background: #f0f0f0;
 }
 
-/* HUD */
+/**
+ * Alternative HUD positioning
+ * Absolute positioning with light background
+ */
 .hud {
 	position: absolute;
 	top: 20px;
@@ -355,15 +541,24 @@ input.form-control:focus {
 	min-width: 200px;
 }
 
+/**
+ * Stats section spacing
+ */
 .stats {
 	margin-bottom: 15px;
 }
 
+/**
+ * Individual stat item spacing
+ */
 .stat-item {
 	margin-bottom: 8px;
 	font-size: 1.1rem;
 }
 
+/**
+ * Leaderboard title styling
+ */
 .leaderboard h5 {
 	margin-bottom: 10px;
 	color: #333;
@@ -371,11 +566,19 @@ input.form-control:focus {
 	padding-bottom: 5px;
 }
 
+/**
+ * Leaderboard items container
+ * Fixed height with scroll for overflow
+ */
 .leaderboard-items {
 	max-height: 300px;
 	overflow-y: auto;
 }
 
+/**
+ * Alternative leaderboard item
+ * Improved spacing and alignment
+ */
 .leaderboard-item {
 	display: flex;
 	justify-content: space-between;
@@ -385,17 +588,29 @@ input.form-control:focus {
 	font-size: 0.9rem;
 }
 
+/**
+ * Current player highlight alternative
+ * Light blue background
+ */
 .leaderboard-item.current-player {
 	background-color: #e3f2fd;
 	border-radius: 5px;
 	font-weight: bold;
 }
 
+/**
+ * Leaderboard name styling
+ * Flexible width with left alignment
+ */
 .leaderboard-name {
 	flex: 1;
 	text-align: left;
 }
 
+/**
+ * Leaderboard mass display
+ * Fixed width with right alignment
+ */
 .leaderboard-mass {
 	font-weight: bold;
 	color: #666;
@@ -403,7 +618,10 @@ input.form-control:focus {
 	text-align: right;
 }
 
-/* Canvas */
+/**
+ * Canvas positioning
+ * Covers entire game screen
+ */
 #gameCanvas {
 	position: absolute;
 	top: 0;
@@ -412,7 +630,10 @@ input.form-control:focus {
 	height: 100%;
 }
 
-/* Game Over Screen */
+/**
+ * Alternative game over screen
+ * Dark overlay with centered content
+ */
 .game-over-screen {
 	position: fixed;
 	top: 0;
@@ -426,12 +647,19 @@ input.form-control:focus {
 	z-index: 2000;
 }
 
+/**
+ * Game over container alternative
+ */
 .game-over-container {
 	width: 100%;
 	max-width: 500px;
 	padding: 20px;
 }
 
+/**
+ * Game over card alternative
+ * White background with shadow
+ */
 .game-over-card {
 	background: white;
 	padding: 3rem;
@@ -440,16 +668,25 @@ input.form-control:focus {
 	text-align: center;
 }
 
+/**
+ * Game over title alternative
+ */
 .game-over-title {
 	font-size: 3rem;
 	color: #e74c3c;
 	margin-bottom: 2rem;
 }
 
+/**
+ * Game over stats container
+ */
 .game-over-stats {
 	margin-bottom: 2rem;
 }
 
+/**
+ * Individual stat row
+ */
 .stat {
 	display: flex;
 	justify-content: space-between;
@@ -458,37 +695,60 @@ input.form-control:focus {
 	border-bottom: 1px solid #eee;
 }
 
+/**
+ * Stat label styling
+ */
 .stat-label {
 	font-weight: bold;
 	color: #666;
 }
 
+/**
+ * Stat value styling
+ */
 .stat-value {
 	font-weight: bold;
 	color: #333;
 }
 
+/**
+ * Game over actions layout
+ */
 .game-over-actions {
 	display: flex;
 	gap: 15px;
 	justify-content: center;
 }
 
-/* Scrollbar styling */
+/* ===== SCROLLBAR STYLING ===== */
+
+/**
+ * Custom scrollbar for leaderboard
+ * Webkit-based browsers only
+ */
 .leaderboard-items::-webkit-scrollbar {
 	width: 6px;
 }
 
+/**
+ * Scrollbar track styling
+ */
 .leaderboard-items::-webkit-scrollbar-track {
 	background: #f1f1f1;
 	border-radius: 3px;
 }
 
+/**
+ * Scrollbar thumb styling
+ */
 .leaderboard-items::-webkit-scrollbar-thumb {
 	background: #c1c1c1;
 	border-radius: 3px;
 }
 
+/**
+ * Scrollbar thumb hover state
+ */
 .leaderboard-items::-webkit-scrollbar-thumb:hover {
 	background: #a8a8a8;
 }
