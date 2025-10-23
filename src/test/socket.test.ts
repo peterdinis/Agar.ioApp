@@ -1,7 +1,7 @@
 import { io as ioc, Socket as ClientSocket } from "socket.io-client";
 import { Server } from "http";
 import { TestUtils } from "./utils/test-utils";
-import { GameServer } from "../src/game/gameServer";
+import { GameServer } from "../game/gameServer";
 
 describe("Socket.io Connections", () => {
 	let server: Server;
