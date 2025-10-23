@@ -1,5 +1,5 @@
 import { Server } from "socket.io";
-import { GameServer } from "../game/gameServer";
+import { GameServer } from "../src/game/gameServer";
 
 // Mock socket.io
 jest.mock("socket.io");

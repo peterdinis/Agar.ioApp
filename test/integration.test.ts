@@ -2,7 +2,7 @@ import request from "supertest";
 import { io as ioc } from "socket.io-client";
 import { TestUtils } from "./utils/test-utils";
 import { Server } from "http";
-import { GameServer } from "../game/gameServer";
+import { GameServer } from "../src/game/gameServer";
 import { Application } from "express";
 
 describe("Full Integration Test", () => {

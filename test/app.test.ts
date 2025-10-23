@@ -1,9 +1,9 @@
 import request from "supertest";
 import path from "path";
 import express from "express";
-import { TestUtils } from "./utils/test-utils";
 import { Server } from "http";
 import { Application } from "express";
+import { TestUtils } from "./utils/test-utils";
 
 describe("Express App", () => {
 	let app: Application;
