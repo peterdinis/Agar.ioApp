@@ -56,7 +56,7 @@ export class GameServer {
 
   private readonly PLAYER_SPEED = 15;
   private readonly MIN_SPLIT_MASS = 50;
-  
+
   // Optimalizácia: Spatial partitioning
   private readonly QUADRANT_SIZE = 500;
   private quadrants: Map<string, Quadrant> = new Map();
@@ -75,7 +75,7 @@ export class GameServer {
   private initializeQuadrants(): void {
     const cols = Math.ceil(this.WORLD_WIDTH / this.QUADRANT_SIZE);
     const rows = Math.ceil(this.WORLD_HEIGHT / this.QUADRANT_SIZE);
-    
+
     for (let x = 0; x < cols; x++) {
       for (let y = 0; y < rows; y++) {
         const quadrantId = `${x}_${y}`;
@@ -102,7 +102,7 @@ export class GameServer {
     if (!player) return;
 
     const newQuadrantId = this.getQuadrantId(player.x, player.y);
-    
+
     // Odstrániť zo starého kvadrantu
     if (oldX !== undefined && oldY !== undefined) {
       const oldQuadrantId = this.getQuadrantId(oldX, oldY);
@@ -119,7 +119,7 @@ export class GameServer {
     if (newQuadrant) {
       newQuadrant.players.add(playerId);
     }
-    
+
     player.quadrant = newQuadrantId;
   }
 
@@ -129,7 +129,7 @@ export class GameServer {
 
     const quadrantId = this.getQuadrantId(food.x, food.y);
     food.quadrant = quadrantId;
-    
+
     const quadrant = this.quadrants.get(quadrantId);
     if (quadrant) {
       quadrant.food.add(foodId);
@@ -151,7 +151,7 @@ export class GameServer {
       color: this.getRandomColor(),
       quadrant: ''
     };
-    
+
     this.food.set(food.id, food);
     this.updateFoodQuadrant(food.id);
   }
@@ -159,14 +159,14 @@ export class GameServer {
   private movePlayerTowardsTarget(player: Player, targetX: number, targetY: number): void {
     const oldX = player.x;
     const oldY = player.y;
-    
+
     const dx = targetX - player.x;
     const dy = targetY - player.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
 
     if (distance > 5) {
       const speed = this.PLAYER_SPEED;
-      
+
       const moveX = (dx / distance) * speed;
       const moveY = (dy / distance) * speed;
 
@@ -175,9 +175,9 @@ export class GameServer {
 
       player.x = Math.max(player.radius, Math.min(this.WORLD_WIDTH - player.radius, player.x));
       player.y = Math.max(player.radius, Math.min(this.WORLD_HEIGHT - player.radius, player.y));
-      
+
       player.lastMoveTime = Date.now();
-      
+
       // Aktualizovať kvadrant ak sa pohla
       if (Math.abs(oldX - player.x) > 1 || Math.abs(oldY - player.y) > 1) {
         this.updatePlayerQuadrant(player.id, oldX, oldY);
@@ -190,17 +190,17 @@ export class GameServer {
     if (!mainPlayer) return;
 
     const allParts = this.getAllPlayerParts(playerId);
-    
+
     this.movePlayerTowardsTarget(mainPlayer, targetX, targetY);
 
     allParts.forEach(part => {
       if (part.id !== playerId) {
         const relX = part.x - mainPlayer.x;
         const relY = part.y - mainPlayer.y;
-        
+
         const partTargetX = targetX + relX;
         const partTargetY = targetY + relY;
-        
+
         this.movePlayerTowardsTarget(part, partTargetX, partTargetY);
       }
     });
@@ -209,10 +209,10 @@ export class GameServer {
   private getAllPlayerParts(playerId: string): Player[] {
     const parts: Player[] = [];
     const mainPlayer = this.players.get(playerId);
-    
+
     if (mainPlayer) {
       parts.push(mainPlayer);
-      
+
       if (mainPlayer.splitParts) {
         mainPlayer.splitParts.forEach(partId => {
           const part = this.players.get(partId);
@@ -221,7 +221,7 @@ export class GameServer {
           }
         });
       }
-      
+
       // Optimalizácia: Použiť Map pre rýchlejší lookup
       for (const [id, player] of this.players) {
         if (player.parentId === playerId) {
@@ -229,7 +229,7 @@ export class GameServer {
         }
       }
     }
-    
+
     return parts;
   }
 
@@ -284,7 +284,7 @@ export class GameServer {
           isControlled: true,
           lastUpdate: Date.now()
         };
-        
+
         this.players.set(socket.id, player);
         this.updatePlayerQuadrant(socket.id);
 
@@ -317,7 +317,7 @@ export class GameServer {
             });
           }
           this.players.delete(socket.id);
-          
+
           // Odstrániť z kvadrantu
           if (player.quadrant) {
             const quadrant = this.quadrants.get(player.quadrant);
@@ -325,7 +325,7 @@ export class GameServer {
               quadrant.players.delete(socket.id);
             }
           }
-          
+
           console.log(`Player disconnected: ${socket.id}. Total players: ${this.players.size}`);
         }
       });
@@ -378,23 +378,23 @@ export class GameServer {
 
   private checkMerge(): void {
     const playersArray = Array.from(this.players.entries());
-    
+
     for (let i = 0; i < playersArray.length; i++) {
       const [playerId, player] = playersArray[i];
-      
+
       if (player.parentId) {
         const parent = this.players.get(player.parentId);
         if (parent && this.distance(player.x, player.y, parent.x, parent.y) < parent.radius * 2) {
           parent.mass += player.mass;
           parent.radius = this.massToRadius(parent.mass);
           parent.score += player.score;
-          
+
           if (parent.splitParts) {
             parent.splitParts = parent.splitParts.filter(id => id !== playerId);
           }
-          
+
           this.players.delete(playerId);
-          
+
           // Odstrániť z kvadrantu
           if (player.quadrant) {
             const quadrant = this.quadrants.get(player.quadrant);
@@ -410,10 +410,10 @@ export class GameServer {
   private checkCollisions(): void {
     // Optimalizácia: Kontrolovať kolízie iba v susedných kvadrantoch
     const processedPairs = new Set<string>();
-    
+
     for (const [quadrantId, quadrant] of this.quadrants) {
       const playerIds = Array.from(quadrant.players);
-      
+
       // Kolízie hráčov s jedlom v ich kvadrante
       for (const playerId of playerIds) {
         const player = this.players.get(playerId);
@@ -430,7 +430,7 @@ export class GameServer {
           if (distance < player.radius) {
             this.food.delete(foodId);
             quadrant.food.delete(foodId);
-            
+
             const massGain = foodItem.radius * 2;
             player.mass += massGain;
             player.radius = this.massToRadius(player.mass);
@@ -442,12 +442,12 @@ export class GameServer {
         // Kolízie medzi hráčmi v rovnakom kvadrante
         for (const otherPlayerId of playerIds) {
           if (playerId === otherPlayerId) continue;
-          
+
           const pairKey = [playerId, otherPlayerId].sort().join('_');
           if (processedPairs.has(pairKey)) continue;
-          
+
           processedPairs.add(pairKey);
-          
+
           const otherPlayer = this.players.get(otherPlayerId);
           if (!otherPlayer) continue;
 
@@ -459,18 +459,18 @@ export class GameServer {
 
   private checkPlayerCollision(player: Player, otherPlayer: Player): void {
     const samePlayer = (player.parentId && otherPlayer.parentId && player.parentId === otherPlayer.parentId) ||
-                      (player.parentId === otherPlayer.id) || 
-                      (otherPlayer.parentId === player.id) ||
-                      (player.id === otherPlayer.parentId);
-    
+      (player.parentId === otherPlayer.id) ||
+      (otherPlayer.parentId === player.id) ||
+      (player.id === otherPlayer.parentId);
+
     if (samePlayer) {
       return;
     }
-    
+
     const dx = player.x - otherPlayer.x;
     const dy = player.y - otherPlayer.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
-    
+
     if (distance < player.radius + otherPlayer.radius) {
       const canPlayerEatOther = player.mass > otherPlayer.mass * 1.15;
       const canOtherEatPlayer = otherPlayer.mass > player.mass * 1.15;
@@ -488,7 +488,7 @@ export class GameServer {
     eater.mass += massGain;
     eater.radius = this.massToRadius(eater.mass);
     eater.score += Math.round(massGain);
-    
+
     if (!eaten.isBot) {
       this.io.to(eaten.id).emit('playerDeath', {
         playerId: eaten.id,
@@ -504,7 +504,7 @@ export class GameServer {
     eaten.mass = this.BASE_MASS;
     eaten.radius = this.BASE_RADIUS;
     eaten.score = 0;
-    
+
     this.updatePlayerQuadrant(eaten.id);
   }
 
@@ -517,11 +517,11 @@ export class GameServer {
     const gameLoop = () => {
       const currentTime = Date.now();
       const deltaTime = currentTime - lastUpdateTime;
-      
+
       // Update game logic
       if (deltaTime >= targetFrameTime) {
         lastUpdateTime = currentTime;
-        
+
         this.checkCollisions();
         this.checkMerge();
       }
@@ -529,7 +529,7 @@ export class GameServer {
       // Broadcast game state (menej často)
       if (currentTime - lastBroadcastTime >= targetBroadcastTime) {
         lastBroadcastTime = currentTime;
-        
+
         const gameState = {
           players: Array.from(this.players.values()).map(p => ({
             id: p.id,

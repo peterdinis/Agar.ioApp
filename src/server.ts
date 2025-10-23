@@ -10,7 +10,7 @@ const httpServer = createServer(app);
 const io = new Server(httpServer);
 
 // Handlebars setup
-app.engine('handlebars', engine({ 
+app.engine('handlebars', engine({
   defaultLayout: false,
   extname: '.handlebars'
 }));
@@ -18,7 +18,7 @@ app.set('view engine', 'handlebars');
 
 // Fix views path for both dev (ts-node) and production (compiled js)
 const isProduction = __dirname.includes('dist');
-const viewsPath = isProduction 
+const viewsPath = isProduction
   ? path.join(__dirname, '../views')
   : path.join(__dirname, './views');
 const publicPath = isProduction
