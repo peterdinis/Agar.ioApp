@@ -46,12 +46,14 @@
         </div>
         <div class="leaderboard">
           <h5>Leaderboard</h5>
-          <template x-for="(player, idx) in leaderboard" :key="player.id">
-            <div class="leaderboard-item" :class="{ 'current-player': player.id === currentPlayer?.id }">
-              <span x-text="`${idx + 1}. ${player.name}`"></span>
-              <span x-text="Math.floor(player.mass)"></span>
-            </div>
-          </template>
+          <div class="leaderboard-items">
+            <template x-for="(player, idx) in leaderboard" :key="player.id">
+              <div class="leaderboard-item" :class="{ 'current-player': player.id === currentPlayer?.id }">
+                <span class="leaderboard-name" x-text="`${idx + 1}. ${player.name}`"></span>
+                <span class="leaderboard-mass" x-text="Math.floor(player.mass)"></span>
+              </div>
+            </template>
+          </div>
         </div>
       </div>
 
