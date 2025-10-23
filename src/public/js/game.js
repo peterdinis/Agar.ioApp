@@ -23,7 +23,7 @@ function gameApp() {
     lastServerUpdate: 0,
     frameCount: 0,
     lastMoveSend: 0,
-    playerInitialized: false, // Nová premenná na sledovanie inicializácie
+    playerInitialized: false,
 
     init() {
       this.socket = io({
@@ -39,7 +39,7 @@ function gameApp() {
         this.currentPlayer = data.player;
         this.worldWidth = data.worldWidth;
         this.worldHeight = data.worldHeight;
-        this.playerInitialized = true; // Hráč je inicializovaný
+        this.playerInitialized = true;
         this.initCanvas();
         this.startGameLoop();
       });
@@ -52,13 +52,11 @@ function gameApp() {
         this.food = gameState.food;
         this.playerCount = this.players.length;
 
-        // DÔLEŽITÉ: Hľadať hráča len ak je inicializovaný
         if (this.playerInitialized && this.currentPlayer) {
           const current = this.players.find(p => p.id === this.currentPlayer.id);
           if (current) {
             this.currentPlayer = current;
           }
-          // Ak hráč nie je v zozname, NEspúšťať game-over
         }
 
         this.updateLeaderboard();
@@ -90,13 +88,11 @@ function gameApp() {
       this.finalMass = this.currentPlayer?.mass || 0;
       this.eatenBy = data.eatenBy || 'Another player';
       
-      // Calculate final position
       const sortedPlayers = [...this.players]
         .sort((a, b) => b.mass - a.mass);
       const position = sortedPlayers.findIndex(p => p.id === this.currentPlayer?.id) + 1;
       this.finalPosition = position > 0 ? `#${position}` : 'Unknown';
 
-      // Add death animation to canvas
       if (this.canvas) {
         this.canvas.classList.add('death-animation');
         setTimeout(() => {
@@ -123,9 +119,20 @@ function gameApp() {
         }
       });
 
+      // VEĽMI RÝCHLA INTERPOLÁCIA PRE PLYNULÝ POHYB
+      for (const [id, interp] of this.interpolatedPlayers) {
+        const player = this.players.find(p => p.id === id);
+        if (player) {
+          const interpFactor = 0.5; // ZVÝŠENÉ NA 0.5 PRE OKAMŽITÚ ODOZVU
+          interp.x = player.x; // PRIAMY UPDATE BEZ INTERPOLÁCIE
+          interp.y = player.y;
+          interp.radius = player.radius;
+        }
+      }
+
       // Cleanup starých interpolácií
       for (const [id, interp] of this.interpolatedPlayers) {
-        if (now - interp.lastUpdate > 5000) {
+        if (now - interp.lastUpdate > 3000) {
           this.interpolatedPlayers.delete(id);
         }
       }
@@ -142,7 +149,7 @@ function gameApp() {
       this.finalMass = 0;
       this.finalPosition = 0;
       this.eatenBy = '';
-      this.playerInitialized = false; // Resetovať pred novou hrou
+      this.playerInitialized = false;
       this.interpolatedPlayers.clear();
       this.socket.emit('join', this.playerName);
     },
@@ -156,7 +163,6 @@ function gameApp() {
     backToMenu() {
       console.log('Returning to main menu');
       
-      // Reset všetkých stavových premenných
       this.gameStarted = false;
       this.gameOver = false;
       this.currentPlayer = null;
@@ -170,7 +176,6 @@ function gameApp() {
       this.eatenBy = '';
       this.playerInitialized = false;
       
-      // Vyčistiť canvas
       if (this.canvas && this.ctx) {
         this.ctx.fillStyle = '#222';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
@@ -179,7 +184,6 @@ function gameApp() {
       console.log('Successfully returned to main menu');
     },
 
-    // ... (zvyšok kódu zostáva rovnaký)
     initCanvas() {
       this.canvas = document.getElementById('gameCanvas');
       this.ctx = this.canvas.getContext('2d');
@@ -193,7 +197,6 @@ function gameApp() {
         this.mouse.y = e.clientY - rect.top;
       });
 
-      // Touch support for mobile
       this.canvas.addEventListener('touchmove', (e) => {
         e.preventDefault();
         const rect = this.canvas.getBoundingClientRect();
@@ -215,7 +218,6 @@ function gameApp() {
         
         this.frameCount++;
         
-        // Render len na 30 FPS pre lepšiu výkonnosť
         if (delta >= 33) {
           this.update(delta);
           this.render();
@@ -233,37 +235,25 @@ function gameApp() {
       const targetX = this.camera.x + this.mouse.x;
       const targetY = this.camera.y + this.mouse.y;
 
-      // Optimalizácia: posielaj pohyb len každých 100ms
+      // ČASTEJŠIE POSIELANIE POHYBU PRE LEPŠIU ODOZVU
       const now = Date.now();
-      if (now - this.lastMoveSend > 100) {
+      if (now - this.lastMoveSend > 30) {
         this.socket.emit('move', { x: targetX, y: targetY });
         this.lastMoveSend = now;
       }
 
-      // Spomalená interpolácia kamery
-      const lerpFactor = 0.08;
+      // VEĽMI RÝCHLA KAMERA PRE OKAMŽITÚ ODOZVU
+      const lerpFactor = 0.3;
       const targetCameraX = this.currentPlayer.x - this.canvas.width / 2;
       const targetCameraY = this.currentPlayer.y - this.canvas.height / 2;
       
       this.camera.x += (targetCameraX - this.camera.x) * lerpFactor;
       this.camera.y += (targetCameraY - this.camera.y) * lerpFactor;
-
-      // Plynulá interpolácia pozícií hráčov
-      this.players.forEach(p => {
-        const interp = this.interpolatedPlayers.get(p.id);
-        if (interp) {
-          const interpFactor = 0.2;
-          interp.x += (p.x - interp.x) * interpFactor;
-          interp.y += (p.y - interp.y) * interpFactor;
-          interp.radius += (p.radius - interp.radius) * interpFactor;
-        }
-      });
     },
 
     render() {
       if (!this.ctx) return;
       
-      // Jednoduché pozadie
       this.ctx.fillStyle = '#222';
       this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
@@ -272,7 +262,6 @@ function gameApp() {
       this.ctx.save();
       this.ctx.translate(-this.camera.x, -this.camera.y);
 
-      // Kresli mriežku len každý druhý frame
       if (this.frameCount % 2 === 0) {
         this.drawGrid();
       }
