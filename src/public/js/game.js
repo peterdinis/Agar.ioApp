@@ -1,4 +1,3 @@
-// game.js - klient (vanilla JS)
 function gameApp() {
   return {
     socket: null,

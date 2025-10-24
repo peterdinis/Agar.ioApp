@@ -11,7 +11,6 @@
 </head>
 <body>
   <div x-data="gameApp()" x-init="init()">
-    <!-- Menu Screen -->
     <div x-show="!gameStarted && !gameOver" class="menu-screen">
       <div class="menu-container">
         <h1 class="game-title">Agar.io Clone</h1>
@@ -32,9 +31,7 @@
       </div>
     </div>
 
-    <!-- Game Screen -->
     <div x-show="gameStarted && !gameOver" class="game-screen">
-      <!-- HUD -->
       <div class="hud">
         <div class="stats">
           <div class="stat-item">
@@ -57,11 +54,9 @@
         </div>
       </div>
 
-      <!-- Canvas -->
       <canvas id="gameCanvas"></canvas>
     </div>
-
-    <!-- Game Over Screen -->
+    
     <div x-show="gameOver" class="game-over-screen">
       <div class="game-over-container">
         <div class="game-over-card">

@@ -9,7 +9,6 @@ const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer);
 
-// Handlebars setup
 app.engine('handlebars', engine({
 	defaultLayout: false,
 	extname: '.handlebars',
@@ -22,7 +21,6 @@ const publicPath = path.join(__dirname, './public');
 
 app.set('views', viewsPath);
 
-// Static files
 app.use(express.static(publicPath));
 
 // Routes
@@ -30,7 +28,6 @@ app.get('/', (_, res) => {
 	res.render('index');
 });
 
-// Game server
 new GameServer(io);
 
 const PORT = 3000;

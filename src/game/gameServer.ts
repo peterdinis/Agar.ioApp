@@ -29,8 +29,8 @@ export class GameServer {
   private MAX_FOOD_RADIUS = 8;
   private BASE_RADIUS = 20;
 
-  private SERVER_TICK_MS = 16;  // ~60 FPS
-  private EMIT_MS = 50;         // aktualizácia pre klienta
+  private SERVER_TICK_MS = 16; 
+  private EMIT_MS = 50;        
   private lastEmit = 0;
 
   constructor(io: Server) {
@@ -104,7 +104,6 @@ export class GameServer {
 
   private checkCollisions() {
     for (const p of this.players.values()) {
-      // kolízie s food
       for (const [fid, f] of this.food) {
         const dx = p.x - f.x, dy = p.y - f.y;
         if (Math.sqrt(dx*dx + dy*dy) < p.radius) {
@@ -114,8 +113,7 @@ export class GameServer {
           this.spawnFood();
         }
       }
-
-      // kolízie s hráčmi
+      
       for (const other of this.players.values()) {
         if (p.id === other.id) continue;
         const dx = p.x - other.x, dy = p.y - other.y;
