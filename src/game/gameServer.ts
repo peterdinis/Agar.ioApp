@@ -1,4 +1,3 @@
-// gameServer.ts - čistá verzia bez botov
 import { Server, Socket } from 'socket.io';
 
 interface Player {
@@ -31,7 +30,7 @@ export class GameServer {
   private BASE_RADIUS = 20;
 
   private SERVER_TICK_MS = 16;  // ~60 FPS
-  private EMIT_MS = 100;
+  private EMIT_MS = 50;         // aktualizácia pre klienta
   private lastEmit = 0;
 
   constructor(io: Server) {
@@ -84,16 +83,17 @@ export class GameServer {
       socket.on('move', (data: { x: number; y: number }) => {
         const p = this.players.get(socket.id);
         if (!p) return;
+
         const dx = data.x - p.x, dy = data.y - p.y;
         const dist = Math.sqrt(dx*dx + dy*dy);
         const speed = Math.max(4, 12 - p.mass / 40);
-        const move = Math.min(speed, dist);
         if (dist > 0) {
+          const move = Math.min(speed, dist);
           p.x += (dx / dist) * move;
           p.y += (dy / dist) * move;
+          p.x = Math.max(p.radius, Math.min(this.WORLD_WIDTH - p.radius, p.x));
+          p.y = Math.max(p.radius, Math.min(this.WORLD_HEIGHT - p.radius, p.y));
         }
-        p.x = Math.max(p.radius, Math.min(this.WORLD_WIDTH - p.radius, p.x));
-        p.y = Math.max(p.radius, Math.min(this.WORLD_HEIGHT - p.radius, p.y));
       });
 
       socket.on('disconnect', () => {
@@ -115,14 +115,13 @@ export class GameServer {
         }
       }
 
-      // kolízie s inými hráčmi
+      // kolízie s hráčmi
       for (const other of this.players.values()) {
         if (p.id === other.id) continue;
         const dx = p.x - other.x, dy = p.y - other.y;
         const dist = Math.sqrt(dx*dx + dy*dy);
         if (dist < p.radius + other.radius) {
           if (p.mass > other.mass * 1.15) {
-            // väčší hráč zje menšieho
             p.mass += other.mass * 0.8;
             p.radius = this.massToRadius(p.mass);
             this.io.to(other.id).emit('playerDeath', { playerId: other.id, eatenBy: p.name });
