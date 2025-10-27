@@ -91,10 +91,10 @@ export class GameServer {
         const dx = data.x - p.x;
         const dy = data.y - p.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        
+
         // Plynulejšia rýchlosť pohybu
         const speed = Math.max(3, 10 - p.mass / 50);
-        
+
         if (dist > 0) {
           const move = Math.min(speed, dist);
           p.vx = (dx / dist) * move;
@@ -116,7 +116,7 @@ export class GameServer {
       // Aplikovanie pohybu
       p.x += p.vx;
       p.y += p.vy;
-      
+
       // Obmedzenie pohybu v rámci sveta
       p.x = Math.max(p.radius, Math.min(this.WORLD_WIDTH - p.radius, p.x));
       p.y = Math.max(p.radius, Math.min(this.WORLD_HEIGHT - p.radius, p.y));
@@ -129,7 +129,7 @@ export class GameServer {
         const dx = p.x - f.x;
         const dy = p.y - f.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        
+
         if (dist < p.radius) {
           p.mass += f.radius * 0.5;
           p.radius = this.massToRadius(p.mass);
@@ -137,13 +137,13 @@ export class GameServer {
           this.spawnFood();
         }
       }
-      
+
       for (const other of this.players.values()) {
         if (p.id === other.id) continue;
         const dx = p.x - other.x;
         const dy = p.y - other.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        
+
         if (dist < p.radius + other.radius) {
           if (p.mass > other.mass * 1.15) {
             p.mass += other.mass * 0.8;
@@ -180,7 +180,7 @@ export class GameServer {
     const loop = () => {
       this.updatePlayers();
       this.checkCollisions();
-      
+
       const now = Date.now();
       if (now - this.lastEmit > this.EMIT_MS) {
         this.broadcastGameState();

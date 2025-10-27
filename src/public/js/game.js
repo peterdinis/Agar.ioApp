@@ -46,11 +46,11 @@ function gameApp() {
         this.worldWidth = data.worldWidth;
         this.worldHeight = data.worldHeight;
         this.playerInitialized = true;
-        
+
         // Inicializácia pozícií
         this.lastServerPosition = { x: data.player.x, y: data.player.y };
         this.targetPosition = { x: data.player.x, y: data.player.y };
-        
+
         this.initCanvas();
         this.startGameLoop();
       });
@@ -81,7 +81,7 @@ function gameApp() {
 
     applyServerSnapshot(snapshot) {
       const ts = snapshot.ts || Date.now();
-      
+
       // Aktualizácia vlastného hráča s interpoláciou
       if (this.currentPlayer) {
         const serverPlayer = snapshot.players?.find(p => p.id === this.currentPlayer.id);
@@ -98,22 +98,22 @@ function gameApp() {
       // Interpolácia ostatných hráčov
       for (const p of snapshot.players || []) {
         const entry = this.interpolatedPlayers.get(p.id);
-        const snap = { 
-          x: p.x, 
-          y: p.y, 
-          r: p.radius, 
-          mass: p.mass, 
+        const snap = {
+          x: p.x,
+          y: p.y,
+          r: p.radius,
+          mass: p.mass,
           ts,
           vx: p.vx || 0,
           vy: p.vy || 0
         };
 
         if (!entry) {
-          this.interpolatedPlayers.set(p.id, { 
-            prev: { ...snap }, 
-            next: { ...snap }, 
-            name: p.name, 
-            color: p.color 
+          this.interpolatedPlayers.set(p.id, {
+            prev: { ...snap },
+            next: { ...snap },
+            name: p.name,
+            color: p.color
           });
         } else {
           entry.prev = { ...entry.next };
@@ -125,12 +125,12 @@ function gameApp() {
         // Aktualizácia zoznamu hráčov
         const existing = this.players.find(x => x.id === p.id);
         if (!existing) {
-          this.players.push({ 
-            id: p.id, 
-            name: p.name, 
-            color: p.color, 
-            mass: p.mass, 
-            radius: p.radius 
+          this.players.push({
+            id: p.id,
+            name: p.name,
+            color: p.color,
+            mass: p.mass,
+            radius: p.radius
           });
         } else {
           existing.mass = p.mass;
@@ -182,7 +182,7 @@ function gameApp() {
     },
 
     restartGame() { this.startGame(); },
-    
+
     backToMenu() {
       this.gameStarted = false;
       this.gameOver = false;
@@ -227,10 +227,10 @@ function gameApp() {
 
     update(delta) {
       if (!this.currentPlayer || this.gameOver || !this.gameStarted) return;
-      
+
       // Interpolácia vlastného hráča
       this.interpolateSelfPlayer();
-      
+
       // Odoslanie pohybu na server
       const now = Date.now();
       if (now - this.lastMoveSend > this.MOVE_SEND_MS) {
@@ -249,19 +249,19 @@ function gameApp() {
 
     interpolateSelfPlayer() {
       if (!this.currentPlayer) return;
-      
+
       const timeSinceUpdate = Date.now() - this.lastServerUpdate;
       const interpFactor = Math.min(1, timeSinceUpdate / this.SERVER_TICK_MS);
-      
+
       // Interpolácia medzi poslednou serverovou pozíciou a cieľovou pozíciou
       this.currentPlayer.x = this.lerp(
-        this.lastServerPosition.x, 
-        this.targetPosition.x, 
+        this.lastServerPosition.x,
+        this.targetPosition.x,
         interpFactor
       );
       this.currentPlayer.y = this.lerp(
-        this.lastServerPosition.y, 
-        this.targetPosition.y, 
+        this.lastServerPosition.y,
+        this.targetPosition.y,
         interpFactor
       );
     },
@@ -275,10 +275,10 @@ function gameApp() {
       const prev = entry.prev, next = entry.next;
       const dt = next.ts - prev.ts;
       if (dt <= 0) return next;
-      
+
       const t = (now - prev.ts) / dt;
       const clampedT = Math.max(0, Math.min(1, t));
-      
+
       return {
         x: this.lerp(prev.x, next.x, clampedT),
         y: this.lerp(prev.y, next.y, clampedT),
@@ -290,7 +290,7 @@ function gameApp() {
       this.ctx.fillStyle = '#222';
       this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
       if (!this.currentPlayer || this.gameOver || !this.gameStarted) return;
-      
+
       this.ctx.save();
       this.ctx.translate(-this.camera.x, -this.camera.y);
       this.drawGrid();
@@ -328,7 +328,7 @@ function gameApp() {
 
     drawPlayers() {
       const drawList = [];
-      
+
       // Vlastný hráč
       if (this.currentPlayer) {
         drawList.push({
@@ -340,14 +340,14 @@ function gameApp() {
           mass: this.currentPlayer.mass
         });
       }
-      
+
       // Ostatní hráči
       for (const [id, entry] of this.interpolatedPlayers) {
         if (id === this.currentPlayer?.id) continue; // Preskočiť vlastného hráča
-        
+
         const interp = this.interpolateEntry(entry);
         if (!interp) continue;
-        
+
         drawList.push({
           id,
           ...interp,
@@ -358,16 +358,16 @@ function gameApp() {
           mass: entry.next?.mass || entry.prev?.mass || 0
         });
       }
-      
+
       // Zoradenie podľa veľkosti pre správne prekrytie
       drawList.sort((a, b) => a.radius - b.radius);
-      
+
       for (const p of drawList) {
         this.ctx.fillStyle = p.color;
         this.ctx.beginPath();
         this.ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
         this.ctx.fill();
-        
+
         this.ctx.strokeStyle = p.isSelf ? '#fff' : 'rgba(0,0,0,0.3)';
         this.ctx.lineWidth = p.isSelf ? 5 : 3;
         this.ctx.stroke();
