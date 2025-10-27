@@ -25,11 +25,15 @@ function gameApp() {
     lastMoveSend: 0,
     playerInitialized: false,
 
-    SERVER_TICK_MS: 100,
-    MOVE_SEND_MS: 30,
+    SERVER_TICK_MS: 50,
+    MOVE_SEND_MS: 16, // Znížené pre plynulejší pohyb
     INTERP_MAX_AGE: 3000,
-    cameraLerp: 0.25,
+    cameraLerp: 0.08, // Znížené pre plynulejšiu kameru
     debug: false,
+
+    // Pridané pre interpoláciu vlastného hráča
+    targetPosition: { x: 0, y: 0 },
+    lastServerPosition: { x: 0, y: 0 },
 
     init() {
       this.socket = io({ transports: ['websocket'], upgrade: false });
@@ -42,6 +46,11 @@ function gameApp() {
         this.worldWidth = data.worldWidth;
         this.worldHeight = data.worldHeight;
         this.playerInitialized = true;
+        
+        // Inicializácia pozícií
+        this.lastServerPosition = { x: data.player.x, y: data.player.y };
+        this.targetPosition = { x: data.player.x, y: data.player.y };
+        
         this.initCanvas();
         this.startGameLoop();
       });
@@ -72,39 +81,66 @@ function gameApp() {
 
     applyServerSnapshot(snapshot) {
       const ts = snapshot.ts || Date.now();
+      
+      // Aktualizácia vlastného hráča s interpoláciou
+      if (this.currentPlayer) {
+        const serverPlayer = snapshot.players?.find(p => p.id === this.currentPlayer.id);
+        if (serverPlayer) {
+          this.lastServerPosition.x = this.currentPlayer.x;
+          this.lastServerPosition.y = this.currentPlayer.y;
+          this.targetPosition.x = serverPlayer.x;
+          this.targetPosition.y = serverPlayer.y;
+          this.currentPlayer.mass = serverPlayer.mass;
+          this.currentPlayer.radius = serverPlayer.radius;
+        }
+      }
+
+      // Interpolácia ostatných hráčov
       for (const p of snapshot.players || []) {
         const entry = this.interpolatedPlayers.get(p.id);
-        const snap = { x: p.x, y: p.y, r: p.radius, mass: p.mass, ts };
+        const snap = { 
+          x: p.x, 
+          y: p.y, 
+          r: p.radius, 
+          mass: p.mass, 
+          ts,
+          vx: p.vx || 0,
+          vy: p.vy || 0
+        };
 
         if (!entry) {
-          this.interpolatedPlayers.set(p.id, { prev: { ...snap }, next: { ...snap }, name: p.name, color: p.color });
+          this.interpolatedPlayers.set(p.id, { 
+            prev: { ...snap }, 
+            next: { ...snap }, 
+            name: p.name, 
+            color: p.color 
+          });
         } else {
-          entry.prev = entry.next;
+          entry.prev = { ...entry.next };
           entry.next = snap;
           entry.name = p.name;
           entry.color = p.color;
         }
 
+        // Aktualizácia zoznamu hráčov
         const existing = this.players.find(x => x.id === p.id);
         if (!existing) {
-          this.players.push({ id: p.id, name: p.name, color: p.color, mass: p.mass, radius: p.radius });
+          this.players.push({ 
+            id: p.id, 
+            name: p.name, 
+            color: p.color, 
+            mass: p.mass, 
+            radius: p.radius 
+          });
         } else {
           existing.mass = p.mass;
           existing.radius = p.radius;
-          existing.x = p.x;
-          existing.y = p.y;
-        }
-
-        if (this.currentPlayer && p.id === this.currentPlayer.id) {
-          this.currentPlayer.x = p.x;
-          this.currentPlayer.y = p.y;
-          this.currentPlayer.mass = p.mass;
-          this.currentPlayer.radius = p.radius;
         }
       }
 
       this.food = (snapshot.food || []).map(f => ({ ...f }));
 
+      // Čistenie starých hráčov
       const presentIds = new Set((snapshot.players || []).map(p => p.id));
       for (const [id, entry] of this.interpolatedPlayers) {
         if (!presentIds.has(id)) {
@@ -140,10 +176,13 @@ function gameApp() {
       this.interpolatedPlayers.clear();
       this.players = [];
       this.food = [];
+      this.lastServerPosition = { x: 0, y: 0 };
+      this.targetPosition = { x: 0, y: 0 };
       this.socket.emit('join', this.playerName);
     },
 
     restartGame() { this.startGame(); },
+    
     backToMenu() {
       this.gameStarted = false;
       this.gameOver = false;
@@ -186,21 +225,49 @@ function gameApp() {
       requestAnimationFrame(loop);
     },
 
-    update() {
+    update(delta) {
       if (!this.currentPlayer || this.gameOver || !this.gameStarted) return;
-      const targetX = this.camera.x + this.mouse.x;
-      const targetY = this.camera.y + this.mouse.y;
-
+      
+      // Interpolácia vlastného hráča
+      this.interpolateSelfPlayer();
+      
+      // Odoslanie pohybu na server
       const now = Date.now();
       if (now - this.lastMoveSend > this.MOVE_SEND_MS) {
+        const targetX = this.camera.x + this.mouse.x;
+        const targetY = this.camera.y + this.mouse.y;
         this.socket.emit('move', { x: Math.round(targetX), y: Math.round(targetY) });
         this.lastMoveSend = now;
       }
 
+      // Plynulejšie sledovanie kamery
       const targetCameraX = (this.currentPlayer.x || 0) - this.canvas.width / 2;
       const targetCameraY = (this.currentPlayer.y || 0) - this.canvas.height / 2;
       this.camera.x += (targetCameraX - this.camera.x) * this.cameraLerp;
       this.camera.y += (targetCameraY - this.camera.y) * this.cameraLerp;
+    },
+
+    interpolateSelfPlayer() {
+      if (!this.currentPlayer) return;
+      
+      const timeSinceUpdate = Date.now() - this.lastServerUpdate;
+      const interpFactor = Math.min(1, timeSinceUpdate / this.SERVER_TICK_MS);
+      
+      // Interpolácia medzi poslednou serverovou pozíciou a cieľovou pozíciou
+      this.currentPlayer.x = this.lerp(
+        this.lastServerPosition.x, 
+        this.targetPosition.x, 
+        interpFactor
+      );
+      this.currentPlayer.y = this.lerp(
+        this.lastServerPosition.y, 
+        this.targetPosition.y, 
+        interpFactor
+      );
+    },
+
+    lerp(start, end, factor) {
+      return start + (end - start) * factor;
     },
 
     interpolateEntry(entry) {
@@ -208,16 +275,22 @@ function gameApp() {
       const prev = entry.prev, next = entry.next;
       const dt = next.ts - prev.ts;
       if (dt <= 0) return next;
+      
       const t = (now - prev.ts) / dt;
-      const clampedT = Math.max(-0.2, Math.min(1.2, t));
-      const lerp = (a, b, tt) => a + (b - a) * tt;
-      return { x: lerp(prev.x, next.x, clampedT), y: lerp(prev.y, next.y, clampedT), r: lerp(prev.r, next.r, clampedT) };
+      const clampedT = Math.max(0, Math.min(1, t));
+      
+      return {
+        x: this.lerp(prev.x, next.x, clampedT),
+        y: this.lerp(prev.y, next.y, clampedT),
+        r: this.lerp(prev.r, next.r, clampedT)
+      };
     },
 
     render() {
       this.ctx.fillStyle = '#222';
       this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
       if (!this.currentPlayer || this.gameOver || !this.gameStarted) return;
+      
       this.ctx.save();
       this.ctx.translate(-this.camera.x, -this.camera.y);
       this.drawGrid();
@@ -231,6 +304,7 @@ function gameApp() {
       const startX = Math.floor(this.camera.x / gridSize) * gridSize;
       const startY = Math.floor(this.camera.y / gridSize) * gridSize;
       this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+      this.ctx.lineWidth = 1;
       this.ctx.beginPath();
       for (let x = startX; x < startX + this.canvas.width + gridSize; x += gridSize) {
         this.ctx.moveTo(x, this.camera.y);
@@ -254,20 +328,46 @@ function gameApp() {
 
     drawPlayers() {
       const drawList = [];
-      for (const [id, entry] of this.interpolatedPlayers) {
-        const interp = this.interpolateEntry(entry);
-        if (!interp) continue;
+      
+      // Vlastný hráč
+      if (this.currentPlayer) {
         drawList.push({
-          id, ...interp, radius: interp.r, name: entry.name, color: entry.color,
-          isSelf: id === this.currentPlayer.id, mass: entry.next?.mass || entry.prev?.mass || 0
+          ...this.currentPlayer,
+          radius: this.currentPlayer.radius,
+          name: this.currentPlayer.name,
+          color: this.currentPlayer.color,
+          isSelf: true,
+          mass: this.currentPlayer.mass
         });
       }
+      
+      // Ostatní hráči
+      for (const [id, entry] of this.interpolatedPlayers) {
+        if (id === this.currentPlayer?.id) continue; // Preskočiť vlastného hráča
+        
+        const interp = this.interpolateEntry(entry);
+        if (!interp) continue;
+        
+        drawList.push({
+          id,
+          ...interp,
+          radius: interp.r,
+          name: entry.name,
+          color: entry.color,
+          isSelf: false,
+          mass: entry.next?.mass || entry.prev?.mass || 0
+        });
+      }
+      
+      // Zoradenie podľa veľkosti pre správne prekrytie
       drawList.sort((a, b) => a.radius - b.radius);
+      
       for (const p of drawList) {
         this.ctx.fillStyle = p.color;
         this.ctx.beginPath();
         this.ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
         this.ctx.fill();
+        
         this.ctx.strokeStyle = p.isSelf ? '#fff' : 'rgba(0,0,0,0.3)';
         this.ctx.lineWidth = p.isSelf ? 5 : 3;
         this.ctx.stroke();
