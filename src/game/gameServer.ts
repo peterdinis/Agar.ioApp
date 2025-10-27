@@ -1,193 +1,262 @@
-import { Server, Socket } from 'socket.io';
+import { Server, Socket } from "socket.io";
 
 interface Player {
-  id: string;
-  x: number;
-  y: number;
-  radius: number;
-  color: string;
-  name: string;
-  mass: number;
-  vx: number;
-  vy: number;
+	id: string;
+	x: number;
+	y: number;
+	radius: number;
+	color: string;
+	name: string;
+	mass: number;
+	targetX: number;
+	targetY: number;
 }
 
 interface Food {
-  id: string;
-  x: number;
-  y: number;
-  radius: number;
-  color: string;
+	id: string;
+	x: number;
+	y: number;
+	radius: number;
+	color: string;
 }
 
 export class GameServer {
-  private io: Server;
-  private players = new Map<string, Player>();
-  private food = new Map<string, Food>();
-  private WORLD_WIDTH = 5000;
-  private WORLD_HEIGHT = 5000;
-  private FOOD_COUNT = 1200;
-  private MIN_FOOD_RADIUS = 5;
-  private MAX_FOOD_RADIUS = 8;
-  private BASE_RADIUS = 20;
+	private io: Server;
+	private players = new Map<string, Player>();
+	private food = new Map<string, Food>();
+	private WORLD_WIDTH = 5000;
+	private WORLD_HEIGHT = 5000;
+	private FOOD_COUNT = 1000;
+	private MIN_FOOD_RADIUS = 4;
+	private MAX_FOOD_RADIUS = 7;
+	private BASE_MASS = 100;
 
-  private SERVER_TICK_MS = 16;
-  private EMIT_MS = 50; // Zvýšené pre stabilnejšie updaty
-  private lastEmit = 0;
+	private TICK_RATE = 60; // 60 FPS server
+	private BROADCAST_RATE = 50; // 20 updatov za sekundu pre klientov
 
-  constructor(io: Server) {
-    this.io = io;
-    this.initializeFood();
-    this.setupSocketHandlers();
-    this.startGameLoop();
-  }
+	constructor(io: Server) {
+		this.io = io;
+		this.initializeFood();
+		this.setupSocketHandlers();
+		this.startGameLoop();
+	}
 
-  private initializeFood() {
-    for (let i = 0; i < this.FOOD_COUNT; i++) this.spawnFood();
-  }
+	private initializeFood() {
+		for (let i = 0; i < this.FOOD_COUNT; i++) {
+			this.spawnFood();
+		}
+	}
 
-  private spawnFood() {
-    const f: Food = {
-      id: `food_${Date.now()}_${Math.random()}`,
-      x: Math.random() * this.WORLD_WIDTH,
-      y: Math.random() * this.WORLD_HEIGHT,
-      radius: this.MIN_FOOD_RADIUS + Math.random() * (this.MAX_FOOD_RADIUS - this.MIN_FOOD_RADIUS),
-      color: this.getRandomColor()
-    };
-    this.food.set(f.id, f);
-  }
+	private spawnFood() {
+		const f: Food = {
+			id: `food_${Date.now()}_${Math.random()}`,
+			x: Math.random() * this.WORLD_WIDTH,
+			y: Math.random() * this.WORLD_HEIGHT,
+			radius:
+				this.MIN_FOOD_RADIUS +
+				Math.random() * (this.MAX_FOOD_RADIUS - this.MIN_FOOD_RADIUS),
+			color: this.getRandomColor(),
+		};
+		this.food.set(f.id, f);
+	}
 
-  private getRandomColor() {
-    const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8'];
-    return colors[Math.floor(Math.random() * colors.length)];
-  }
+	private getRandomColor() {
+		const colors = [
+			"#FF6B6B",
+			"#4ECDC4",
+			"#45B7D1",
+			"#FFA07A",
+			"#98D8C8",
+			"#F7DC6F",
+			"#BB8FCE",
+			"#85C1E9",
+		];
+		return colors[Math.floor(Math.random() * colors.length)];
+	}
 
-  private massToRadius(m: number) {
-    return Math.sqrt(m) * 2;
-  }
+	private massToRadius(mass: number) {
+		return Math.sqrt(mass) * 2;
+	}
 
-  private setupSocketHandlers() {
-    this.io.on('connection', (socket: Socket) => {
-      socket.on('join', (name: string) => {
-        const player: Player = {
-          id: socket.id,
-          x: Math.random() * this.WORLD_WIDTH,
-          y: Math.random() * this.WORLD_HEIGHT,
-          radius: this.BASE_RADIUS,
-          mass: this.BASE_RADIUS,
-          color: this.getRandomColor(),
-          name: name || 'Anonymous',
-          vx: 0,
-          vy: 0
-        };
-        this.players.set(socket.id, player);
-        socket.emit('init', { player, worldWidth: this.WORLD_WIDTH, worldHeight: this.WORLD_HEIGHT });
-      });
+	private setupSocketHandlers() {
+		this.io.on("connection", (socket: Socket) => {
+			console.log("Player connected:", socket.id);
 
-      socket.on('move', (data: { x: number; y: number }) => {
-        const p = this.players.get(socket.id);
-        if (!p) return;
+			socket.on("join", (name: string) => {
+				const player: Player = {
+					id: socket.id,
+					x: Math.random() * this.WORLD_WIDTH,
+					y: Math.random() * this.WORLD_HEIGHT,
+					radius: this.massToRadius(this.BASE_MASS),
+					color: this.getRandomColor(),
+					name: name?.trim() || "Anonymous",
+					mass: this.BASE_MASS,
+					targetX: 0,
+					targetY: 0,
+				};
 
-        const dx = data.x - p.x;
-        const dy = data.y - p.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
+				player.targetX = player.x;
+				player.targetY = player.y;
 
-        // Plynulejšia rýchlosť pohybu
-        const speed = Math.max(3, 10 - p.mass / 50);
+				this.players.set(socket.id, player);
 
-        if (dist > 0) {
-          const move = Math.min(speed, dist);
-          p.vx = (dx / dist) * move;
-          p.vy = (dy / dist) * move;
-        } else {
-          p.vx = 0;
-          p.vy = 0;
-        }
-      });
+				socket.emit("init", {
+					player: { ...player },
+					worldWidth: this.WORLD_WIDTH,
+					worldHeight: this.WORLD_HEIGHT,
+				});
 
-      socket.on('disconnect', () => {
-        this.players.delete(socket.id);
-      });
-    });
-  }
+				console.log(
+					`Player ${player.name} joined at (${player.x}, ${player.y})`,
+				);
+			});
 
-  private updatePlayers() {
-    for (const p of this.players.values()) {
-      // Aplikovanie pohybu
-      p.x += p.vx;
-      p.y += p.vy;
+			socket.on("move", (data: { x: number; y: number }) => {
+				const player = this.players.get(socket.id);
+				if (!player) return;
 
-      // Obmedzenie pohybu v rámci sveta
-      p.x = Math.max(p.radius, Math.min(this.WORLD_WIDTH - p.radius, p.x));
-      p.y = Math.max(p.radius, Math.min(this.WORLD_HEIGHT - p.radius, p.y));
-    }
-  }
+				// Uloženie cieľovej pozície
+				player.targetX = Math.max(0, Math.min(this.WORLD_WIDTH, data.x));
+				player.targetY = Math.max(0, Math.min(this.WORLD_HEIGHT, data.y));
+			});
 
-  private checkCollisions() {
-    for (const p of this.players.values()) {
-      for (const [fid, f] of this.food) {
-        const dx = p.x - f.x;
-        const dy = p.y - f.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
+			socket.on("disconnect", () => {
+				this.players.delete(socket.id);
+				console.log("Player disconnected:", socket.id);
+			});
+		});
+	}
 
-        if (dist < p.radius) {
-          p.mass += f.radius * 0.5;
-          p.radius = this.massToRadius(p.mass);
-          this.food.delete(fid);
-          this.spawnFood();
-        }
-      }
+	private updatePlayers(deltaTime: number) {
+		const baseSpeed = 5;
 
-      for (const other of this.players.values()) {
-        if (p.id === other.id) continue;
-        const dx = p.x - other.x;
-        const dy = p.y - other.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
+		for (const player of this.players.values()) {
+			const dx = player.targetX - player.x;
+			const dy = player.targetY - player.y;
+			const distance = Math.sqrt(dx * dx + dy * dy);
 
-        if (dist < p.radius + other.radius) {
-          if (p.mass > other.mass * 1.15) {
-            p.mass += other.mass * 0.8;
-            p.radius = this.massToRadius(p.mass);
-            this.io.to(other.id).emit('playerDeath', { playerId: other.id, eatenBy: p.name });
-            this.players.delete(other.id);
-          }
-        }
-      }
-    }
-  }
+			if (distance > 1) {
+				// Rýchlosť založená na hmotnosti
+				const speed = Math.max(1, baseSpeed - player.mass / 500);
+				const moveDistance = Math.min(distance, speed);
 
-  private broadcastGameState() {
-    const snapshot = {
-      ts: Date.now(),
-      players: Array.from(this.players.values()).map(p => ({
-        id: p.id,
-        x: p.x,
-        y: p.y,
-        radius: p.radius,
-        mass: p.mass,
-        name: p.name,
-        color: p.color,
-        vx: p.vx,
-        vy: p.vy
-      })),
-      food: Array.from(this.food.values()),
-      totalPlayers: this.players.size
-    };
-    this.io.emit('gameUpdate', snapshot);
-  }
+				if (distance > 0) {
+					player.x += (dx / distance) * moveDistance;
+					player.y += (dy / distance) * moveDistance;
+				}
 
-  private startGameLoop() {
-    const loop = () => {
-      this.updatePlayers();
-      this.checkCollisions();
+				// Udržanie hráča v hracej ploche
+				player.x = Math.max(
+					player.radius,
+					Math.min(this.WORLD_WIDTH - player.radius, player.x),
+				);
+				player.y = Math.max(
+					player.radius,
+					Math.min(this.WORLD_HEIGHT - player.radius, player.y),
+				);
+			}
 
-      const now = Date.now();
-      if (now - this.lastEmit > this.EMIT_MS) {
-        this.broadcastGameState();
-        this.lastEmit = now;
-      }
-      setTimeout(loop, this.SERVER_TICK_MS);
-    };
-    loop();
-  }
+			// Aktualizácia polomeru na základe hmotnosti
+			player.radius = this.massToRadius(player.mass);
+		}
+	}
+
+	private checkCollisions() {
+		// Kolízie s jedlom
+		for (const player of this.players.values()) {
+			for (const [foodId, food] of this.food) {
+				const dx = player.x - food.x;
+				const dy = player.y - food.y;
+				const distance = Math.sqrt(dx * dx + dy * dy);
+
+				if (distance < player.radius + food.radius) {
+					// Hráč zje jedlo
+					player.mass += food.radius * 2;
+					this.food.delete(foodId);
+					this.spawnFood();
+					break;
+				}
+			}
+		}
+
+		// Kolízie medzi hráčmi
+		const playersArray = Array.from(this.players.values());
+
+		for (let i = 0; i < playersArray.length; i++) {
+			for (let j = i + 1; j < playersArray.length; j++) {
+				const player1 = playersArray[i];
+				const player2 = playersArray[j];
+
+				const dx = player1.x - player2.x;
+				const dy = player1.y - player2.y;
+				const distance = Math.sqrt(dx * dx + dy * dy);
+				const minDistance = player1.radius + player2.radius;
+
+				if (distance < minDistance) {
+					// Hráč s väčšou hmotnosťou zje menšieho
+					if (player1.mass > player2.mass * 1.2) {
+						player1.mass += player2.mass * 0.8;
+						this.io.to(player2.id).emit("playerDeath", {
+							playerId: player2.id,
+							eatenBy: player1.name,
+						});
+						this.players.delete(player2.id);
+					} else if (player2.mass > player1.mass * 1.2) {
+						player2.mass += player1.mass * 0.8;
+						this.io.to(player1.id).emit("playerDeath", {
+							playerId: player1.id,
+							eatenBy: player2.name,
+						});
+						this.players.delete(player1.id);
+					}
+				}
+			}
+		}
+	}
+
+	private broadcastGameState() {
+		const gameState = {
+			ts: Date.now(),
+			players: Array.from(this.players.values()).map((player) => ({
+				id: player.id,
+				x: player.x,
+				y: player.y,
+				radius: player.radius,
+				mass: player.mass,
+				name: player.name,
+				color: player.color,
+			})),
+			food: Array.from(this.food.values()),
+			totalPlayers: this.players.size,
+		};
+
+		this.io.emit("gameUpdate", gameState);
+	}
+
+	private startGameLoop() {
+		let lastTime = Date.now();
+		let lastBroadcast = 0;
+		const tickInterval = 1000 / this.TICK_RATE;
+
+		const gameLoop = () => {
+			const currentTime = Date.now();
+			const deltaTime = currentTime - lastTime;
+
+			// Update game logic
+			this.updatePlayers(deltaTime);
+			this.checkCollisions();
+
+			// Broadcast at specified rate
+			if (currentTime - lastBroadcast >= this.BROADCAST_RATE) {
+				this.broadcastGameState();
+				lastBroadcast = currentTime;
+			}
+
+			lastTime = currentTime;
+
+			setTimeout(gameLoop, tickInterval);
+		};
+
+		gameLoop();
+	}
 }
