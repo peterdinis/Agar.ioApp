@@ -4,7 +4,7 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 import { engine } from "express-handlebars";
 import path from "path";
-import { GameServer } from "./game/gameServer";
+import { GameApp } from "./game/gameServer";
 
 const app = express();
 const httpServer = createServer(app);
@@ -35,7 +35,7 @@ app.get("/", (_, res) => {
   res.render("index");
 });
 
-new GameServer(io);
+new GameApp();
 
 const PORT = process.env.PORT || 3000;
 
