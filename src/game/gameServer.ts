@@ -1,5 +1,5 @@
 import * as PIXI from 'pixi.js';
-import { io, Socket } from 'socket.io-client';
+import { io, type Socket } from 'socket.io-client';
 
 // Interfaces
 interface Player {
@@ -322,7 +322,7 @@ export class GameApp {
 
     // Process players
     for (const serverPlayer of gameState.players) {
-      let playerState = this.playerStates.get(serverPlayer.id);
+      const playerState = this.playerStates.get(serverPlayer.id);
 
       if (!playerState) {
         // New player

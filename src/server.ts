@@ -18,9 +18,7 @@ app.engine('handlebars', engine({
   defaultLayout: false,
   extname: 'handlebars',
   helpers: {
-    json: function(context: any) {
-      return JSON.stringify(context);
-    }
+    json: (context: any) => JSON.stringify(context)
   }
 }));
 app.set('view engine', 'handlebars');

@@ -265,7 +265,7 @@ class GameApp {
 
     // Process players
     for (const serverPlayer of gameState.players || []) {
-      let playerState = this.playerStates.get(serverPlayer.id);
+      const playerState = this.playerStates.get(serverPlayer.id);
 
       if (!playerState) {
         // New player
