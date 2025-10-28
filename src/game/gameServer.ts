@@ -61,6 +61,9 @@ interface AlpineGameData {
   finalMass: number;
   finalPosition: number;
   eatenBy: string;
+  startGame: () => void;
+  restartGame: () => void;
+  backToMenu: () => void;
 }
 
 export class GameApp {
@@ -113,7 +116,16 @@ export class GameApp {
   }
 
   public init(): void {
-    // Initialize Socket.IO with proper typing
+    // Skontrolovať, či sme v prehliadači
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      console.warn('GameApp can only run in browser environment');
+      return;
+    }
+
+    // Najprv inicializuj Alpine.js data
+    this.initializeAlpineData();
+    
+    // Potom inicializuj Socket.IO
     this.socket = io({
       transports: ["websocket"],
       upgrade: false
@@ -122,24 +134,76 @@ export class GameApp {
     this.setupSocketListeners();
     this.initPixi();
     this.setupEventListeners();
-    this.initializeAlpineData();
   }
 
   private initializeAlpineData(): void {
-    // Initialize Alpine.js data structure
+    // Vytvor Alpine.js data structure s predvolenými hodnotami
     const alpineData: AlpineGameData = {
-      gameStarted: this.gameStarted,
-      gameOver: this.gameOver,
-      playerName: this.playerName,
-      currentPlayer: this.currentPlayer,
-      playerCount: this.playerCount,
-      leaderboard: this.leaderboard,
-      finalMass: this.finalMass,
-      finalPosition: this.finalPosition,
-      eatenBy: this.eatenBy
+      gameStarted: false,
+      gameOver: false,
+      playerName: "",
+      currentPlayer: null,
+      playerCount: 0,
+      leaderboard: [],
+      finalMass: 0,
+      finalPosition: 0,
+      eatenBy: "",
+      
+      // Alpine.js metódy
+      startGame: () => {
+        const nameInput = document.getElementById('nameInput') as HTMLInputElement;
+        if (nameInput) {
+          this.playerName = nameInput.value.trim() || "Anonymous";
+        } else {
+          this.playerName = alpineData.playerName || "Anonymous";
+        }
+        this.startGame();
+      },
+      
+      restartGame: () => {
+        this.restartGame();
+      },
+      
+      backToMenu: () => {
+        this.backToMenu();
+      }
     };
     
+    // Ulož do window objektu
     (window as any).alpineGameData = alpineData;
+    
+    // Inicializuj Alpine.js až po načítaní DOM
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => {
+        this.initAlpineJS();
+      });
+    } else {
+      this.initAlpineJS();
+    }
+  }
+
+  private initAlpineJS(): void {
+    // Skontroluj, či Alpine.js je k dispozícii
+    if (typeof window.Alpine === 'undefined') {
+      console.warn('Alpine.js not loaded yet');
+      setTimeout(() => this.initAlpineJS(), 100);
+      return;
+    }
+
+    // Inicializuj Alpine.js s našimi dátami
+    const alpineData = (window as any).alpineGameData as AlpineGameData;
+    
+    window.Alpine.data('gameApp', () => ({
+      ...alpineData,
+      
+      init() {
+        console.log('Alpine.js game component initialized');
+      }
+    }));
+
+    // Spusti Alpine.js
+    window.Alpine.start();
+    console.log('Alpine.js initialized with game data');
   }
 
   private updateAlpineData(): void {
@@ -159,6 +223,9 @@ export class GameApp {
 
   private initPixi(): void {
     try {
+      // Skontrolovať, či sme v prehliadači
+      if (typeof document === 'undefined') return;
+
       // Create Pixi application
       this.app = new PIXI.Application({
         width: window.innerWidth,
@@ -241,40 +308,25 @@ export class GameApp {
   }
 
   private setupEventListeners(): void {
+    // Skontrolovať, či sme v prehliadači
+    if (typeof document === 'undefined' || !this.app) return;
+
     // Mouse movement
-    if (this.app) {
-      this.app.view.addEventListener('mousemove', (e: MouseEvent) => {
-        const rect = this.app!.view.getBoundingClientRect();
-        this.mouse.x = e.clientX - rect.left;
-        this.mouse.y = e.clientY - rect.top;
-      });
+    this.app.view.addEventListener('mousemove', (e: MouseEvent) => {
+      const rect = this.app!.view.getBoundingClientRect();
+      this.mouse.x = e.clientX - rect.left;
+      this.mouse.y = e.clientY - rect.top;
+    });
 
-      // Touch support for mobile devices
-      this.app.view.addEventListener('touchmove', (e: TouchEvent) => {
-        e.preventDefault();
-        const rect = this.app!.view.getBoundingClientRect();
-        this.mouse.x = e.touches[0].clientX - rect.left;
-        this.mouse.y = e.touches[0].clientY - rect.top;
-      }, { passive: false });
-    }
+    // Touch support for mobile devices
+    this.app.view.addEventListener('touchmove', (e: TouchEvent) => {
+      e.preventDefault();
+      const rect = this.app!.view.getBoundingClientRect();
+      this.mouse.x = e.touches[0].clientX - rect.left;
+      this.mouse.y = e.touches[0].clientY - rect.top;
+    }, { passive: false });
 
-    // Start game button
-    const startBtn = document.getElementById('startBtn');
-    const nameInput = document.getElementById('nameInput') as HTMLInputElement;
-
-    if (startBtn && nameInput) {
-      startBtn.addEventListener('click', () => {
-        this.playerName = nameInput.value.trim() || "Anonymous";
-        this.startGame();
-      });
-
-      nameInput.addEventListener('keypress', (e: KeyboardEvent) => {
-        if (e.key === 'Enter') {
-          this.playerName = nameInput.value.trim() || "Anonymous";
-          this.startGame();
-        }
-      });
-    }
+    // Start game button - už nie je potrebný, lebo to spracováva Alpine.js
   }
 
   private setupSocketListeners(): void {
@@ -434,6 +486,7 @@ export class GameApp {
     }
 
     this.updateAlpineData();
+    console.log('Game started with name:', this.playerName);
   }
 
   public restartGame(): void {
@@ -665,10 +718,26 @@ export class GameApp {
   }
 }
 
-// Initialize game when DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
-  const game = new GameApp();
-  
-  // Make game available globally for Alpine.js
-  (window as any).gameApp = game;
-});
+// Klientská inicializácia
+const initGame = () => {
+  // Skontrolovať, či sme v prehliadači
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return;
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      const game = new GameApp();
+      (window as any).gameApp = game;
+    });
+  } else {
+    // DOM už je načítaný
+    const game = new GameApp();
+    (window as any).gameApp = game;
+  }
+};
+
+// Bezpečne inicializujte hru iba v prehliadači
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+  initGame();
+}

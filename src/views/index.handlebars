@@ -11,62 +11,24 @@
   <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
-  <div x-data="{
-    gameStarted: false,
-    gameOver: false,
-    playerName: '',
-    currentPlayer: null,
-    playerCount: 0,
-    leaderboard: [],
-    finalMass: 0,
-    finalPosition: 0,
-    eatenBy: '',
-    
-    startGame() {
-      if (window.gameApp) {
-        window.gameApp.playerName = this.playerName;
-        window.gameApp.startGame();
-        this.gameStarted = true;
-        this.gameOver = false;
-      }
-    },
-    
-    restartGame() {
-      if (window.gameApp) {
-        window.gameApp.restartGame();
-        this.gameStarted = true;
-        this.gameOver = false;
-      }
-    },
-    
-    backToMenu() {
-      if (window.gameApp) {
-        window.gameApp.backToMenu();
-        this.gameStarted = false;
-        this.gameOver = false;
-      }
-    }
-  }" x-init="
-    // Listen for game state changes
-    if (window.gameApp) {
-      // You could set up observers here for game state changes
-    }
-  ">
+  <div x-data="alpineGameData" x-init="init()">
     <div x-show="!gameStarted && !gameOver" class="menu-screen">
       <div class="menu-container">
         <h1 class="game-title">Agar.io Clone with Pixi.js</h1>
         <div class="mb-3">
           <input 
+            id="nameInput"
             type="text" 
             class="form-control form-control-lg" 
             placeholder="Enter your name"
             x-model="playerName"
-            @keyup.enter="startGame()"
+            @keyup.enter="startGameFromAlpine()"
             maxlength="15">
         </div>
         <button 
+          id="startBtn"
           class="btn btn-primary btn-lg"
-          @click="startGame()">
+          @click="startGameFromAlpine()">
           Play
         </button>
       </div>
@@ -117,10 +79,10 @@
             </div>
           </div>
           <div class="game-over-actions">
-            <button class="btn btn-primary btn-lg" @click="restartGame()">
+            <button class="btn btn-primary btn-lg" @click="restartGameFromAlpine()">
               Play Again
             </button>
-            <button class="btn btn-outline-secondary btn-lg" @click="backToMenu()">
+            <button class="btn btn-outline-secondary btn-lg" @click="backToMenuFromAlpine()">
               Main Menu
             </button>
           </div>
