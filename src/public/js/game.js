@@ -37,6 +37,7 @@ function gameApp() {
 		init() {
 			this.socket = io({ transports: ["websocket"], upgrade: false });
 			this.setupSocketListeners();
+			this.setupEventListeners(); // Pridané - nastavenie event listenerov
 		},
 
 		setupSocketListeners() {
@@ -50,6 +51,7 @@ function gameApp() {
 
 				this.initCanvas();
 				this.startGameLoop();
+				this.updateUI(); // Pridané - update UI po inicializácii
 			});
 
 			this.socket.on("gameUpdate", (gameState) => {
@@ -58,12 +60,144 @@ function gameApp() {
 				this.serverUpdateTime = Date.now();
 				this.lastServerTimestamp = gameState.ts;
 				this.processServerUpdate(gameState);
+				this.updateUI(); // Pridané - update UI po každom game update
 			});
 
 			this.socket.on("playerDeath", (data) => {
-				if (data.playerId === this.currentPlayer?.id)
+				if (data.playerId === this.currentPlayer?.id) {
 					this.handlePlayerDeath(data);
+					this.updateUI(); // Pridané - update UI po smrti hráča
+				}
 			});
+
+			// Pridané - connection listeners pre debug
+			this.socket.on("connect", () => {
+				console.log("Connected to server");
+			});
+
+			this.socket.on("connect_error", (error) => {
+				console.error("Connection error:", error);
+			});
+		},
+
+		// Pridané - nastavenie event listenerov pre tlačidlá
+		setupEventListeners() {
+			const startBtn = document.getElementById("startBtn");
+			const nameInput = document.getElementById("nameInput");
+			const restartBtn = document.getElementById("restartBtn");
+			const backToMenuBtn = document.getElementById("backToMenuBtn");
+
+			if (startBtn && nameInput) {
+				startBtn.addEventListener("click", () => {
+					console.log("Start button clicked");
+					this.playerName = nameInput.value.trim() || "Anonymous";
+					this.startGame();
+				});
+
+				nameInput.addEventListener("keypress", (e) => {
+					if (e.key === "Enter") {
+						console.log("Enter pressed in name input");
+						this.playerName = nameInput.value.trim() || "Anonymous";
+						this.startGame();
+					}
+				});
+			}
+
+			if (restartBtn) {
+				restartBtn.addEventListener("click", () => {
+					console.log("Restart button clicked");
+					this.restartGame();
+				});
+			}
+
+			if (backToMenuBtn) {
+				backToMenuBtn.addEventListener("click", () => {
+					console.log("Back to menu button clicked");
+					this.backToMenu();
+				});
+			}
+		},
+
+		// Pridané - update UI metóda
+		updateUI() {
+			// Update mass display
+			const massElement = document.getElementById("massValue");
+			if (massElement) {
+				massElement.textContent = Math.floor(this.currentPlayer?.mass || 0).toString();
+			}
+
+			// Update player count
+			const playerCountElement = document.getElementById("playerCountValue");
+			if (playerCountElement) {
+				playerCountElement.textContent = this.playerCount.toString();
+			}
+
+			// Update leaderboard
+			this.updateLeaderboardUI();
+
+			// Update game over screen
+			if (this.gameOver) {
+				this.updateGameOverUI();
+			}
+
+			// Show/hide screens based on game state
+			this.updateScreenVisibility();
+		},
+
+		// Pridané - update leaderboard UI
+		updateLeaderboardUI() {
+			const leaderboardContainer = document.getElementById("leaderboardContainer");
+			if (!leaderboardContainer) return;
+
+			leaderboardContainer.innerHTML = '';
+			
+			this.leaderboard.slice(0, 10).forEach((player, index) => {
+				const item = document.createElement('div');
+				const isCurrentPlayer = player.id === this.currentPlayer?.id;
+				item.className = `leaderboard-item ${isCurrentPlayer ? 'current-player' : ''}`;
+				
+				item.innerHTML = `
+					<span class="leaderboard-name">${index + 1}. ${player.name}</span>
+					<span class="leaderboard-mass">${Math.floor(player.mass)}</span>
+				`;
+				
+				leaderboardContainer.appendChild(item);
+			});
+		},
+
+		// Pridané - update game over UI
+		updateGameOverUI() {
+			const finalMassElement = document.getElementById("finalMassValue");
+			if (finalMassElement) {
+				finalMassElement.textContent = Math.floor(this.finalMass).toString();
+			}
+
+			const finalPositionElement = document.getElementById("finalPositionValue");
+			if (finalPositionElement) {
+				finalPositionElement.textContent = this.finalPosition.toString();
+			}
+
+			const eatenByElement = document.getElementById("eatenByValue");
+			if (eatenByElement) {
+				eatenByElement.textContent = this.eatenBy || 'Unknown';
+			}
+		},
+
+		// Pridané - update visibility obrazoviek
+		updateScreenVisibility() {
+			const menuScreen = document.getElementById("menuScreen");
+			const gameScreen = document.getElementById("gameScreen");
+			const gameOverScreen = document.getElementById("gameOverScreen");
+
+			if (menuScreen) {
+				menuScreen.style.display = (!this.gameStarted && !this.gameOver) ? 'flex' : 'none';
+			}
+			if (gameScreen) {
+				gameScreen.style.display = (this.gameStarted && !this.gameOver) ? 'block' : 'none';
+			}
+			if (gameOverScreen) {
+				gameOverScreen.style.display = this.gameOver ? 'flex' : 'none';
+			}
 		},
 
 		// Nový systém interpolácie
@@ -167,10 +301,13 @@ function gameApp() {
 
 			const sorted = [...this.leaderboard].sort((a, b) => b.mass - a.mass);
 			const pos = sorted.findIndex((p) => p.id === this.currentPlayer?.id) + 1;
-			this.finalPosition = pos > 0 ? `#${pos}` : "Unknown";
+			this.finalPosition = pos > 0 ? pos : 0; // Zmenené z `#${pos}` na číslo
+			
+			this.updateUI(); // Pridané - update UI po smrti
 		},
 
 		startGame() {
+			console.log("startGame called");
 			if (!this.playerName.trim()) this.playerName = "Anonymous";
 			this.gameStarted = true;
 			this.gameOver = false;
@@ -182,14 +319,20 @@ function gameApp() {
 			this.food = [];
 			this.camera = { x: 0, y: 0 };
 			this.lastMoveSend = 0;
+			
+			console.log("Emitting join event with name:", this.playerName);
 			this.socket.emit("join", this.playerName);
+			
+			this.updateUI(); // Pridané - update UI po štarte hry
 		},
 
 		restartGame() {
+			console.log("restartGame called");
 			this.startGame();
 		},
 
 		backToMenu() {
+			console.log("backToMenu called");
 			this.gameStarted = false;
 			this.gameOver = false;
 			this.currentPlayer = null;
@@ -199,10 +342,17 @@ function gameApp() {
 			this.leaderboard = [];
 			this.playerStates.clear();
 			this.camera = { x: 0, y: 0 };
+			
+			this.updateUI(); // Pridané - update UI po návrate do menu
 		},
 
 		initCanvas() {
 			this.canvas = document.getElementById("gameCanvas");
+			if (!this.canvas) {
+				console.error("Canvas element not found!");
+				return;
+			}
+			
 			this.ctx = this.canvas.getContext("2d");
 			this.resizeCanvas();
 			window.addEventListener("resize", () => this.resizeCanvas());
@@ -216,6 +366,7 @@ function gameApp() {
 		},
 
 		resizeCanvas() {
+			if (!this.canvas) return;
 			this.canvas.width = window.innerWidth;
 			this.canvas.height = window.innerHeight;
 		},
@@ -311,7 +462,7 @@ function gameApp() {
 		},
 
 		updateCamera() {
-			if (!this.currentPlayer) return;
+			if (!this.currentPlayer || !this.canvas) return;
 
 			const targetX = this.currentPlayer.x - this.canvas.width / 2;
 			const targetY = this.currentPlayer.y - this.canvas.height / 2;
@@ -322,6 +473,8 @@ function gameApp() {
 		},
 
 		render() {
+			if (!this.ctx || !this.canvas) return;
+			
 			// Clear canvas
 			this.ctx.fillStyle = "#1a1a1a";
 			this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
@@ -432,23 +585,6 @@ function gameApp() {
 // Inicializácia aplikácie
 const app = gameApp();
 window.addEventListener("load", () => {
+	console.log("Window loaded, initializing app");
 	app.init();
-
-	const startBtn = document.getElementById("startBtn");
-	const nameInput = document.getElementById("nameInput");
-
-	if (startBtn && nameInput) {
-		startBtn.addEventListener("click", () => {
-			app.playerName = nameInput.value.trim() || "Anonymous";
-			app.startGame();
-		});
-
-		// Možnosť štartovať hru pomocou Enter
-		nameInput.addEventListener("keypress", (e) => {
-			if (e.key === "Enter") {
-				app.playerName = nameInput.value.trim() || "Anonymous";
-				app.startGame();
-			}
-		});
-	}
 });

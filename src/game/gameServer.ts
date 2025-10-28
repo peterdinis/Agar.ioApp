@@ -50,22 +50,6 @@ interface MoveData {
   y: number;
 }
 
-// Alpine.js data interface
-interface AlpineGameData {
-  gameStarted: boolean;
-  gameOver: boolean;
-  playerName: string;
-  currentPlayer: Player | null;
-  playerCount: number;
-  leaderboard: Player[];
-  finalMass: number;
-  finalPosition: number;
-  eatenBy: string;
-  startGame: () => void;
-  restartGame: () => void;
-  backToMenu: () => void;
-}
-
 export class GameApp {
   private socket: Socket | null = null;
   private gameStarted: boolean = false;
@@ -122,10 +106,9 @@ export class GameApp {
       return;
     }
 
-    // Najprv inicializuj Alpine.js data
-    this.initializeAlpineData();
+    console.log('Initializing GameApp...');
     
-    // Potom inicializuj Socket.IO
+    // Initialize Socket.IO
     this.socket = io({
       transports: ["websocket"],
       upgrade: false
@@ -136,96 +119,8 @@ export class GameApp {
     this.setupEventListeners();
   }
 
-  private initializeAlpineData(): void {
-    // Vytvor Alpine.js data structure s predvolenými hodnotami
-    const alpineData: AlpineGameData = {
-      gameStarted: false,
-      gameOver: false,
-      playerName: "",
-      currentPlayer: null,
-      playerCount: 0,
-      leaderboard: [],
-      finalMass: 0,
-      finalPosition: 0,
-      eatenBy: "",
-      
-      // Alpine.js metódy
-      startGame: () => {
-        const nameInput = document.getElementById('nameInput') as HTMLInputElement;
-        if (nameInput) {
-          this.playerName = nameInput.value.trim() || "Anonymous";
-        } else {
-          this.playerName = alpineData.playerName || "Anonymous";
-        }
-        this.startGame();
-      },
-      
-      restartGame: () => {
-        this.restartGame();
-      },
-      
-      backToMenu: () => {
-        this.backToMenu();
-      }
-    };
-    
-    // Ulož do window objektu
-    (window as any).alpineGameData = alpineData;
-    
-    // Inicializuj Alpine.js až po načítaní DOM
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => {
-        this.initAlpineJS();
-      });
-    } else {
-      this.initAlpineJS();
-    }
-  }
-
-  private initAlpineJS(): void {
-    // Skontroluj, či Alpine.js je k dispozícii
-    if (typeof window.Alpine === 'undefined') {
-      console.warn('Alpine.js not loaded yet');
-      setTimeout(() => this.initAlpineJS(), 100);
-      return;
-    }
-
-    // Inicializuj Alpine.js s našimi dátami
-    const alpineData = (window as any).alpineGameData as AlpineGameData;
-    
-    window.Alpine.data('gameApp', () => ({
-      ...alpineData,
-      
-      init() {
-        console.log('Alpine.js game component initialized');
-      }
-    }));
-
-    // Spusti Alpine.js
-    window.Alpine.start();
-    console.log('Alpine.js initialized with game data');
-  }
-
-  private updateAlpineData(): void {
-    if (!(window as any).alpineGameData) return;
-    
-    const alpineData = (window as any).alpineGameData as AlpineGameData;
-    alpineData.gameStarted = this.gameStarted;
-    alpineData.gameOver = this.gameOver;
-    alpineData.playerName = this.playerName;
-    alpineData.currentPlayer = this.currentPlayer;
-    alpineData.playerCount = this.playerCount;
-    alpineData.leaderboard = this.leaderboard;
-    alpineData.finalMass = this.finalMass;
-    alpineData.finalPosition = this.finalPosition;
-    alpineData.eatenBy = this.eatenBy;
-  }
-
   private initPixi(): void {
     try {
-      // Skontrolovať, či sme v prehliadači
-      if (typeof document === 'undefined') return;
-
       // Create Pixi application
       this.app = new PIXI.Application({
         width: window.innerWidth,
@@ -240,6 +135,7 @@ export class GameApp {
       const gameContainer = document.getElementById('gameCanvasContainer');
       if (gameContainer) {
         gameContainer.appendChild(this.app.view as HTMLCanvasElement);
+        console.log('Pixi.js canvas added to DOM');
       } else {
         console.error('Game container not found');
         return;
@@ -326,20 +222,68 @@ export class GameApp {
       this.mouse.y = e.touches[0].clientY - rect.top;
     }, { passive: false });
 
-    // Start game button - už nie je potrebný, lebo to spracováva Alpine.js
+    // Start game button
+    const startBtn = document.getElementById('startBtn');
+    const nameInput = document.getElementById('nameInput') as HTMLInputElement;
+
+    if (startBtn && nameInput) {
+      startBtn.addEventListener('click', () => {
+        console.log('Start button clicked');
+        this.playerName = nameInput.value.trim() || "Anonymous";
+        this.startGame();
+      });
+
+      nameInput.addEventListener('keypress', (e: KeyboardEvent) => {
+        if (e.key === 'Enter') {
+          console.log('Enter pressed in name input');
+          this.playerName = nameInput.value.trim() || "Anonymous";
+          this.startGame();
+        }
+      });
+    }
+
+    // Game over buttons
+    const restartBtn = document.getElementById('restartBtn');
+    const backToMenuBtn = document.getElementById('backToMenuBtn');
+
+    if (restartBtn) {
+      restartBtn.addEventListener('click', () => {
+        console.log('Restart button clicked');
+        this.restartGame();
+      });
+    }
+
+    if (backToMenuBtn) {
+      backToMenuBtn.addEventListener('click', () => {
+        console.log('Back to menu button clicked');
+        this.backToMenu();
+      });
+    }
   }
 
   private setupSocketListeners(): void {
-    if (!this.socket) return;
+    if (!this.socket) {
+      console.error('Socket is not initialized!');
+      return;
+    }
+
+    this.socket.on("connect", () => {
+      console.log("Connected to server");
+    });
+
+    this.socket.on("connect_error", (error) => {
+      console.error("Connection error:", error);
+    });
 
     this.socket.on("init", (data: InitData) => {
+      console.log("Received init data from server");
       this.currentPlayer = data.player;
       this.worldWidth = data.worldWidth;
       this.worldHeight = data.worldHeight;
 
       this.initPlayerInterpolation(this.currentPlayer.id, this.currentPlayer);
       this.startGameLoop();
-      this.updateAlpineData();
+      this.updateUI();
     });
 
     this.socket.on("gameUpdate", (gameState: GameState) => {
@@ -348,22 +292,19 @@ export class GameApp {
       this.serverUpdateTime = Date.now();
       this.lastServerTimestamp = gameState.ts;
       this.processServerUpdate(gameState);
-      this.updateAlpineData();
+      this.updateUI();
     });
 
     this.socket.on("playerDeath", (data: DeathData) => {
+      console.log("Player death received:", data);
       if (data.playerId === this.currentPlayer?.id) {
         this.handlePlayerDeath(data);
-        this.updateAlpineData();
+        this.updateUI();
       }
     });
 
     this.socket.on("disconnect", () => {
       console.log("Disconnected from server");
-    });
-
-    this.socket.on("connect", () => {
-      console.log("Connected to server");
     });
   }
 
@@ -451,12 +392,97 @@ export class GameApp {
     const sorted = [...this.leaderboard].sort((a, b) => b.mass - a.mass);
     const pos = sorted.findIndex((p) => p.id === this.currentPlayer?.id) + 1;
     this.finalPosition = pos > 0 ? pos : 0;
+    
+    this.updateUI();
+  }
+
+  private updateUI(): void {
+    // Update mass display
+    const massElement = document.getElementById('massValue');
+    if (massElement) {
+      massElement.textContent = Math.floor(this.currentPlayer?.mass || 0).toString();
+    }
+
+    // Update player count
+    const playerCountElement = document.getElementById('playerCountValue');
+    if (playerCountElement) {
+      playerCountElement.textContent = this.playerCount.toString();
+    }
+
+    // Update leaderboard
+    this.updateLeaderboardUI();
+
+    // Update game over screen
+    if (this.gameOver) {
+      this.updateGameOverUI();
+    }
+
+    // Show/hide screens based on game state
+    this.updateScreenVisibility();
+  }
+
+  private updateLeaderboardUI(): void {
+    const leaderboardContainer = document.getElementById('leaderboardContainer');
+    if (!leaderboardContainer) return;
+
+    leaderboardContainer.innerHTML = '';
+    
+    this.leaderboard.slice(0, 10).forEach((player, index) => {
+      const item = document.createElement('div');
+      const isCurrentPlayer = player.id === this.currentPlayer?.id;
+      item.className = `leaderboard-item ${isCurrentPlayer ? 'current-player' : ''}`;
+      
+      item.innerHTML = `
+        <span class="leaderboard-name">${index + 1}. ${player.name}</span>
+        <span class="leaderboard-mass">${Math.floor(player.mass)}</span>
+      `;
+      
+      leaderboardContainer.appendChild(item);
+    });
+  }
+
+  private updateGameOverUI(): void {
+    const finalMassElement = document.getElementById('finalMassValue');
+    if (finalMassElement) {
+      finalMassElement.textContent = Math.floor(this.finalMass).toString();
+    }
+
+    const finalPositionElement = document.getElementById('finalPositionValue');
+    if (finalPositionElement) {
+      finalPositionElement.textContent = this.finalPosition.toString();
+    }
+
+    const eatenByElement = document.getElementById('eatenByValue');
+    if (eatenByElement) {
+      eatenByElement.textContent = this.eatenBy || 'Unknown';
+    }
+  }
+
+  private updateScreenVisibility(): void {
+    const menuScreen = document.getElementById('menuScreen');
+    const gameScreen = document.getElementById('gameScreen');
+    const gameOverScreen = document.getElementById('gameOverScreen');
+
+    if (menuScreen) {
+      menuScreen.style.display = (!this.gameStarted && !this.gameOver) ? 'flex' : 'none';
+    }
+    if (gameScreen) {
+      gameScreen.style.display = (this.gameStarted && !this.gameOver) ? 'block' : 'none';
+    }
+    if (gameOverScreen) {
+      gameOverScreen.style.display = this.gameOver ? 'flex' : 'none';
+    }
   }
 
   public startGame(): void {
+    console.log('startGame() called');
+    
     if (!this.playerName.trim()) {
       this.playerName = "Anonymous";
     }
+    
+    console.log('Player name:', this.playerName);
+    console.log('Socket connected:', this.socket?.connected);
     
     this.gameStarted = true;
     this.gameOver = false;
@@ -482,18 +508,23 @@ export class GameApp {
     }
     
     if (this.socket) {
+      console.log('Emitting join event with name:', this.playerName);
       this.socket.emit("join", this.playerName);
+    } else {
+      console.error('Socket is not initialized!');
     }
 
-    this.updateAlpineData();
+    this.updateUI();
     console.log('Game started with name:', this.playerName);
   }
 
   public restartGame(): void {
+    console.log('restartGame() called');
     this.startGame();
   }
 
   public backToMenu(): void {
+    console.log('backToMenu() called');
     this.gameStarted = false;
     this.gameOver = false;
     this.currentPlayer = null;
@@ -516,12 +547,14 @@ export class GameApp {
       this.foodContainer.removeChildren();
     }
 
-    this.updateAlpineData();
+    this.updateUI();
   }
 
   private startGameLoop(): void {
     if (!this.app) return;
 
+    console.log('Starting game loop');
+    
     // Start Pixi.js ticker
     this.app.ticker.add(() => {
       this.update();
@@ -727,11 +760,13 @@ const initGame = () => {
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
+      console.log('DOM loaded, initializing GameApp');
       const game = new GameApp();
       (window as any).gameApp = game;
     });
   } else {
     // DOM už je načítaný
+    console.log('DOM already loaded, initializing GameApp');
     const game = new GameApp();
     (window as any).gameApp = game;
   }
@@ -739,5 +774,6 @@ const initGame = () => {
 
 // Bezpečne inicializujte hru iba v prehliadači
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+  console.log('Browser environment detected, starting game initialization');
   initGame();
 }
