@@ -27,9 +27,9 @@
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.2.7",
-		"@types/express": "^5.0.3",
+		"@types/express": "^5.0.5",
 		"@types/jest": "^30.0.0",
-		"@types/node": "^24.9.1",
+		"@types/node": "^24.9.2",
 		"@types/pixi.js": "^5.0.0",
 		"@types/supertest": "^6.0.3",
 		"nodemon": "^3.1.10",
