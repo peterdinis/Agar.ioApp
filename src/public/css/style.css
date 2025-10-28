@@ -170,6 +170,12 @@ body {
   height: 100%;
 }
 
+#gameCanvasContainer canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 /* Scrollbar styling */
 .leaderboard-items::-webkit-scrollbar {
   width: 6px;
@@ -187,4 +193,28 @@ body {
 
 .leaderboard-items::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.5);
+}
+
+/* Bootstrap button overrides */
+.btn-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  padding: 0.75rem 2rem;
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+  transform: translateY(-2px);
+  transition: all 0.3s ease;
+}
+
+.btn-outline-secondary {
+  border-color: rgba(255, 255, 255, 0.3);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.btn-outline-secondary:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.5);
+  color: white;
 }
