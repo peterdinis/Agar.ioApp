@@ -3,6 +3,7 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import path from 'path';
 import { engine } from 'express-handlebars';
+import type { DeathData, Food, GameState, HandlebarsContext, InitData, MoveData, Player } from './types/serverTypes';
 
 const app = express();
 const httpServer = createServer(app);
@@ -18,7 +19,7 @@ app.engine('handlebars', engine({
   defaultLayout: false,
   extname: 'handlebars',
   helpers: {
-    json: (context: any) => JSON.stringify(context)
+    json: (context: HandlebarsContext) => JSON.stringify(context)
   }
 }));
 app.set('view engine', 'handlebars');
@@ -31,55 +32,10 @@ app.use(express.static(path.join(__dirname, './public')));
 app.get('/', (req, res) => {
   res.render('index', {
     title: 'Agar.io Clone',
-    gameName: 'Agar.io with Pixi.js',
+    gameName: 'Agar.io',
     description: 'Multiplayer agar.io game built with Pixi.js and Socket.io'
   });
 });
-
-// Interfaces
-interface Player {
-  id: string;
-  x: number;
-  y: number;
-  radius: number;
-  color: string;
-  name: string;
-  mass: number;
-  speed: number;
-}
-
-interface Food {
-  id: string;
-  x: number;
-  y: number;
-  radius: number;
-  color: string;
-  mass: number;
-}
-
-interface GameState {
-  ts: number;
-  players: Player[];
-  food: Food[];
-  totalPlayers: number;
-}
-
-interface InitData {
-  player: Player;
-  worldWidth: number;
-  worldHeight: number;
-}
-
-interface MoveData {
-  x: number;
-  y: number;
-}
-
-interface DeathData {
-  playerId: string;
-  eatenBy: string;
-  finalMass: number;
-}
 
 // Game Server Class
 class GameServer {
