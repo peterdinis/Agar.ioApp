@@ -1,53 +1,11 @@
 import * as PIXI from 'pixi.js';
 import { io, type Socket } from 'socket.io-client';
+import type { Player, Food, PlayerState, InitData, GameState, DeathData, MoveData } from '../types/gameServerTypes';
 
-// Interfaces
-interface Player {
-  id: string;
-  x: number;
-  y: number;
-  radius: number;
-  color: string;
-  name: string;
-  mass: number;
-}
-
-interface Food {
-  id: string;
-  x: number;
-  y: number;
-  radius: number;
-  color: string;
-}
-
-interface PlayerState {
-  current: Player;
-  target: Player;
-  lastUpdate: number;
-  interpolationTime: number;
-}
-
-interface GameState {
-  ts: number;
-  players: Player[];
-  food: Food[];
-  totalPlayers: number;
-}
-
-interface InitData {
-  player: Player;
-  worldWidth: number;
-  worldHeight: number;
-}
-
-interface DeathData {
-  playerId: string;
-  eatenBy: string;
-}
-
-interface MoveData {
-  x: number;
-  y: number;
+declare global {
+  interface Window {
+    gameApp: GameApp | undefined
+  }
 }
 
 export class GameApp {
@@ -60,7 +18,7 @@ export class GameApp {
   private food: Food[] = [];
   private playerCount: number = 0;
   private leaderboard: Player[] = [];
-  
+
   // Pixi.js
   private app: PIXI.Application | null = null;
   private playerContainer: PIXI.Container | null = null;
@@ -68,30 +26,30 @@ export class GameApp {
   private gridContainer: PIXI.Container | null = null;
   private playerSprites: Map<string, PIXI.Graphics> = new Map();
   private foodSprites: Map<string, PIXI.Graphics> = new Map();
-  
+
   // Camera
   private camera: { x: number; y: number } = { x: 0, y: 0 };
   private mouse: { x: number; y: number } = { x: 0, y: 0 };
-  
+
   // World
   private worldWidth: number = 5000;
   private worldHeight: number = 5000;
-  
+
   // Interpolation
   private playerStates: Map<string, PlayerState> = new Map();
   private serverUpdateTime: number = 0;
   private lastServerTimestamp: number = 0;
-  
+
   // Game state
   private finalMass: number = 0;
   private finalPosition: number = 0;
   private eatenBy: string = "";
-  
+
   // Settings
   private readonly SERVER_UPDATE_RATE: number = 50;
   private readonly MOVE_SEND_RATE: number = 16;
   private readonly CAMERA_SMOOTHING: number = 0.08;
-  
+
   // Timing
   private lastMoveSend: number = 0;
 
@@ -107,13 +65,13 @@ export class GameApp {
     }
 
     console.log('Initializing GameApp...');
-    
+
     // Initialize Socket.IO
     this.socket = io({
       transports: ["websocket"],
       upgrade: false
     });
-    
+
     this.setupSocketListeners();
     this.initPixi();
     this.setupEventListeners();
@@ -383,7 +341,7 @@ export class GameApp {
 
   private handlePlayerDeath(data: DeathData): void {
     if (this.gameOver) return;
-    
+
     this.gameOver = true;
     this.gameStarted = false;
     this.finalMass = this.currentPlayer?.mass || 0;
@@ -392,7 +350,7 @@ export class GameApp {
     const sorted = [...this.leaderboard].sort((a, b) => b.mass - a.mass);
     const pos = sorted.findIndex((p) => p.id === this.currentPlayer?.id) + 1;
     this.finalPosition = pos > 0 ? pos : 0;
-    
+
     this.updateUI();
   }
 
@@ -426,17 +384,17 @@ export class GameApp {
     if (!leaderboardContainer) return;
 
     leaderboardContainer.innerHTML = '';
-    
+
     this.leaderboard.slice(0, 10).forEach((player, index) => {
       const item = document.createElement('div');
       const isCurrentPlayer = player.id === this.currentPlayer?.id;
       item.className = `leaderboard-item ${isCurrentPlayer ? 'current-player' : ''}`;
-      
+
       item.innerHTML = `
         <span class="leaderboard-name">${index + 1}. ${player.name}</span>
         <span class="leaderboard-mass">${Math.floor(player.mass)}</span>
       `;
-      
+
       leaderboardContainer.appendChild(item);
     });
   }
@@ -476,14 +434,14 @@ export class GameApp {
 
   public startGame(): void {
     console.log('startGame() called');
-    
+
     if (!this.playerName.trim()) {
       this.playerName = "Anonymous";
     }
-    
+
     console.log('Player name:', this.playerName);
     console.log('Socket connected:', this.socket?.connected);
-    
+
     this.gameStarted = true;
     this.gameOver = false;
     this.finalMass = 0;
@@ -494,19 +452,19 @@ export class GameApp {
     this.food = [];
     this.camera = { x: 0, y: 0 };
     this.lastMoveSend = 0;
-    
+
     // Clear all sprites
     this.playerSprites.clear();
     this.foodSprites.clear();
-    
+
     if (this.playerContainer) {
       this.playerContainer.removeChildren();
     }
-    
+
     if (this.foodContainer) {
       this.foodContainer.removeChildren();
     }
-    
+
     if (this.socket) {
       console.log('Emitting join event with name:', this.playerName);
       this.socket.emit("join", this.playerName);
@@ -534,15 +492,15 @@ export class GameApp {
     this.leaderboard = [];
     this.playerStates.clear();
     this.camera = { x: 0, y: 0 };
-    
+
     // Clear all sprites
     this.playerSprites.clear();
     this.foodSprites.clear();
-    
+
     if (this.playerContainer) {
       this.playerContainer.removeChildren();
     }
-    
+
     if (this.foodContainer) {
       this.foodContainer.removeChildren();
     }
@@ -554,7 +512,7 @@ export class GameApp {
     if (!this.app) return;
 
     console.log('Starting game loop');
-    
+
     // Start Pixi.js ticker
     this.app.ticker.add(() => {
       this.update();
@@ -638,12 +596,12 @@ export class GameApp {
       this.gridContainer.x = -this.camera.x;
       this.gridContainer.y = -this.camera.y;
     }
-    
+
     if (this.foodContainer) {
       this.foodContainer.x = -this.camera.x;
       this.foodContainer.y = -this.camera.y;
     }
-    
+
     if (this.playerContainer) {
       this.playerContainer.x = -this.camera.x;
       this.playerContainer.y = -this.camera.y;
@@ -675,7 +633,7 @@ export class GameApp {
         foodSprite.beginFill(this.hexToNumber(foodItem.color));
         foodSprite.drawCircle(0, 0, foodItem.radius);
         foodSprite.endFill();
-        
+
         this.foodContainer!.addChild(foodSprite);
         this.foodSprites.set(foodItem.id, foodSprite);
       }
@@ -712,17 +670,17 @@ export class GameApp {
 
       // Clear and redraw player
       playerSprite.clear();
-      
+
       // Draw player body
       playerSprite.beginFill(this.hexToNumber(player.color));
       playerSprite.drawCircle(0, 0, player.radius);
       playerSprite.endFill();
-      
+
       // Draw border
       const isSelf = playerId === this.currentPlayer?.id;
       playerSprite.lineStyle(isSelf ? 4 : 2, isSelf ? 0xFFFFFF : 0x000000, isSelf ? 1 : 0.4);
       playerSprite.drawCircle(0, 0, player.radius);
-      
+
       // Update position
       playerSprite.x = player.x;
       playerSprite.y = player.y;
@@ -762,13 +720,13 @@ const initGame = () => {
     document.addEventListener('DOMContentLoaded', () => {
       console.log('DOM loaded, initializing GameApp');
       const game = new GameApp();
-      (window as any).gameApp = game;
+      window.gameApp = game;
     });
   } else {
     // DOM už je načítaný
     console.log('DOM already loaded, initializing GameApp');
     const game = new GameApp();
-    (window as any).gameApp = game;
+    window.gameApp = game;
   }
 };
 
